@@ -7,7 +7,8 @@ import { CategoryBadge } from "@/components/CategoryBadge";
 import { supabase } from "@/lib/supabase/client";
 import { downloadFromApi } from "@/lib/download";
 import { invoiceTotals, type InvoiceWithItems } from "@/lib/types";
-import { COMPANY, DOC_TITLE, DOC_NUMBER_LABEL, currentYymm, docBasePath, seriesPrefix, formatRM } from "@/lib/company";
+import { COMPANY, DOC_TITLE, DOC_NUMBER_LABEL, docBasePath, formatRM } from "@/lib/company";
+import { duplicateDocument } from "@/lib/documents";
 
 export function DocumentDetail({ id }: { id: string }) {
   const router = useRouter();
@@ -27,64 +28,22 @@ export function DocumentDetail({ id }: { id: string }) {
   async function generateReceipt() {
     if (!invoice || busy) return;
     setBusy(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      setBusy(false);
-      return;
-    }
-    const series = seriesPrefix("receipt", invoice.category);
-    const yymm = currentYymm(new Date(invoice.invoice_date));
-    const { data: ctr } = await supabase
-      .from("invoice_counters")
-      .select("last_seq")
-      .eq("category", series)
-      .eq("yymm", yymm)
-      .maybeSingle();
-    const seq = (ctr?.last_seq ?? 0) + 1;
-    const receiptNo = `${series}${yymm}-${String(seq).padStart(2, "0")}`;
+    const res = await duplicateDocument(invoice, { docType: "receipt", date: invoice.invoice_date });
+    setBusy(false);
+    if ("error" in res) return alert(res.error);
+    router.push(`/receipts/${res.id}`);
+  }
 
-    const { data: created, error } = await supabase
-      .from("invoices")
-      .insert({
-        owner_id: user.id,
-        doc_type: "receipt",
-        category: invoice.category,
-        invoice_no: receiptNo,
-        client_id: invoice.client_id,
-        bill_to_name: invoice.bill_to_name,
-        bill_to_reg_no: invoice.bill_to_reg_no,
-        bill_to_address: invoice.bill_to_address,
-        invoice_date: invoice.invoice_date,
-        bank_name: invoice.bank_name,
-        bank_account: invoice.bank_account,
-        sales_tax_rate: invoice.sales_tax_rate,
-        discount: invoice.discount,
-        special_notes: invoice.special_notes,
-      })
-      .select()
-      .single();
-
-    if (error || !created) {
-      setBusy(false);
-      alert(error?.message ?? "Could not create receipt.");
-      return;
-    }
-
-    const items = [...invoice.invoice_items].sort((a, b) => a.sort_order - b.sort_order);
-    if (items.length) {
-      await supabase.from("invoice_items").insert(
-        items.map((it, i) => ({ invoice_id: created.id, description: it.description, line_total: it.line_total, sort_order: i }))
-      );
-    }
-    // bump the receipt counter
-    if (ctr) {
-      await supabase.from("invoice_counters").update({ last_seq: seq }).eq("category", series).eq("yymm", yymm);
-    } else {
-      await supabase.from("invoice_counters").insert({ owner_id: user.id, category: series, yymm, last_seq: seq });
-    }
-    router.push(`/receipts/${created.id}`);
+  // Duplicate as the same type (next number, today's date), then open it in the
+  // editor so the date/name/etc. can be tweaked before saving.
+  async function duplicate() {
+    if (!invoice || busy) return;
+    setBusy(true);
+    const today = new Date().toISOString().slice(0, 10);
+    const res = await duplicateDocument(invoice, { docType: invoice.doc_type, date: today });
+    setBusy(false);
+    if ("error" in res) return alert(res.error);
+    router.push(`${docBasePath(invoice.doc_type)}/${res.id}/edit`);
   }
 
   if (!invoice) {
@@ -107,6 +66,9 @@ export function DocumentDetail({ id }: { id: string }) {
           <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-200 text-neutral-700">{DOC_TITLE[invoice.doc_type]}</span>
         </div>
         <div className="flex gap-2">
+          <button onClick={duplicate} disabled={busy} className="border rounded px-3 py-1.5 text-sm disabled:opacity-50">
+            {busy ? "..." : "Duplicate"}
+          </button>
           {invoice.doc_type === "invoice" && (
             <button onClick={generateReceipt} disabled={busy} className="border rounded px-3 py-1.5 text-sm disabled:opacity-50">
               {busy ? "..." : "Generate Receipt"}
