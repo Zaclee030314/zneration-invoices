@@ -1,4 +1,5 @@
 export type InvoiceCategory = "EVIV" | "ZMIV";
+export type DocType = "invoice" | "receipt";
 
 export interface Client {
   id: string;
@@ -22,6 +23,7 @@ export interface Invoice {
   id: string;
   owner_id: string;
   invoice_no: string;
+  doc_type: DocType;
   category: InvoiceCategory;
   client_id: string | null;
   bill_to_name: string;

@@ -4,8 +4,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { ClientPicker } from "./ClientPicker";
 import { LineItemsEditor, type DraftItem } from "./LineItemsEditor";
-import { CATEGORY_DEFAULTS, currentYymm, formatRM } from "@/lib/company";
-import type { Client, InvoiceCategory, InvoiceWithItems } from "@/lib/types";
+import { CATEGORY_DEFAULTS, currentYymm, docBasePath, seriesPrefix, formatRM } from "@/lib/company";
+import type { Client, DocType, InvoiceCategory, InvoiceWithItems } from "@/lib/types";
 
 function newItem(description = "", line_total = ""): DraftItem {
   return { key: crypto.randomUUID(), description, line_total };
@@ -19,9 +19,10 @@ function dupMessage(msg: string, no: string): string {
   return msg;
 }
 
-// Raise the per-category monthly counter to at least this number's sequence,
-// so the next auto-suggestion continues ascending (handles skipped/manual nos).
-async function syncCounter(category: InvoiceCategory, invoiceNo: string, ownerId: string) {
+// Raise the per-series monthly counter to at least this number's sequence, so
+// the next auto-suggestion continues ascending (handles skipped/manual numbers).
+// `series` is the number prefix (EVIV/ZMIV for invoices, EVRC/ZMRC for receipts).
+async function syncCounter(series: string, invoiceNo: string, ownerId: string) {
   const m = invoiceNo.match(/(\d{4})-(\d+)\s*$/);
   if (!m) return;
   const yymm = m[1];
@@ -30,19 +31,22 @@ async function syncCounter(category: InvoiceCategory, invoiceNo: string, ownerId
   const { data } = await supabase
     .from("invoice_counters")
     .select("last_seq")
-    .eq("category", category)
+    .eq("category", series)
     .eq("yymm", yymm)
     .maybeSingle();
   if (!data) {
-    await supabase.from("invoice_counters").insert({ owner_id: ownerId, category, yymm, last_seq: seq });
+    await supabase.from("invoice_counters").insert({ owner_id: ownerId, category: series, yymm, last_seq: seq });
   } else if (seq > data.last_seq) {
-    await supabase.from("invoice_counters").update({ last_seq: seq }).eq("category", category).eq("yymm", yymm);
+    await supabase.from("invoice_counters").update({ last_seq: seq }).eq("category", series).eq("yymm", yymm);
   }
 }
 
-export function InvoiceForm({ existing }: { existing?: InvoiceWithItems }) {
+export function InvoiceForm({ existing, docType = "invoice" }: { existing?: InvoiceWithItems; docType?: DocType }) {
   const router = useRouter();
   const isEdit = !!existing;
+  // Document type is fixed for the life of the form (set by the route, or kept
+  // from the record being edited) — it drives the number series and the title.
+  const docKind: DocType = existing?.doc_type ?? docType;
 
   const [category, setCategory] = useState<InvoiceCategory>(existing?.category ?? "EVIV");
   const [clientId, setClientId] = useState<string | null>(existing?.client_id ?? null);
@@ -73,17 +77,18 @@ export function InvoiceForm({ existing }: { existing?: InvoiceWithItems }) {
   useEffect(() => {
     if (manualNo) return;
     const yymm = currentYymm(new Date(invoiceDate));
+    const series = seriesPrefix(docKind, category);
     supabase
       .from("invoice_counters")
       .select("last_seq")
-      .eq("category", category)
+      .eq("category", series)
       .eq("yymm", yymm)
       .maybeSingle()
       .then(({ data }) => {
         const nextSeq = (data?.last_seq ?? 0) + 1;
-        setInvoiceNo(`${category}${yymm}-${String(nextSeq).padStart(2, "0")}`);
+        setInvoiceNo(`${series}${yymm}-${String(nextSeq).padStart(2, "0")}`);
       });
-  }, [category, invoiceDate, manualNo]);
+  }, [category, invoiceDate, manualNo, docKind]);
 
   function applyCategoryDefaults(cat: InvoiceCategory) {
     setCategory(cat);
@@ -135,6 +140,7 @@ export function InvoiceForm({ existing }: { existing?: InvoiceWithItems }) {
 
     const payload = {
       owner_id: user.id,
+      doc_type: docKind,
       category,
       client_id: clientId,
       bill_to_name: billToName.trim(),
@@ -182,7 +188,7 @@ export function InvoiceForm({ existing }: { existing?: InvoiceWithItems }) {
     // Keep the per-category monthly counter at least as high as this number's
     // sequence, so future auto-suggestions stay ascending and don't collide —
     // even when the number was entered/skipped manually.
-    await syncCounter(category, finalNo, user.id);
+    await syncCounter(seriesPrefix(docKind, category), finalNo, user.id);
 
     const itemRows = items
       .filter((it) => it.description.trim())
@@ -196,7 +202,7 @@ export function InvoiceForm({ existing }: { existing?: InvoiceWithItems }) {
     setSaving(false);
     if (itemsError) return setErr(itemsError.message);
 
-    router.push(`/invoices/${invoiceId}`);
+    router.push(`${docBasePath(docKind)}/${invoiceId}`);
   }
 
   return (

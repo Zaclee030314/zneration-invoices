@@ -1,5 +1,5 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
-import { COMPANY, formatRM } from "./company";
+import { COMPANY, DOC_TITLE, DOC_NUMBER_LABEL, formatRM } from "./company";
 import { invoiceTotals, type InvoiceItem, type Invoice } from "./types";
 
 const BLUE = "#1f4e79";
@@ -55,7 +55,7 @@ export function InvoicePdfDocument({ invoice, items }: { invoice: Invoice; items
             <Text style={styles.companyName}>{COMPANY.name}</Text>
             <Text style={styles.companyReg}>{COMPANY.regNo}</Text>
           </View>
-          <Text style={styles.invoiceTitle}>Invoice</Text>
+          <Text style={styles.invoiceTitle}>{DOC_TITLE[invoice.doc_type]}</Text>
         </View>
 
         <View style={styles.billDateRow}>
@@ -73,7 +73,7 @@ export function InvoicePdfDocument({ invoice, items }: { invoice: Invoice; items
               <Text style={styles.dateValue}>{dateStr}</Text>
             </View>
             <View style={styles.dateRow}>
-              <Text style={styles.dateLabel}>INV#:</Text>
+              <Text style={styles.dateLabel}>{DOC_NUMBER_LABEL[invoice.doc_type]}:</Text>
               <Text style={styles.dateValue}>{invoice.invoice_no}</Text>
             </View>
           </View>

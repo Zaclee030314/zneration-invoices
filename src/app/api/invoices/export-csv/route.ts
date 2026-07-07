@@ -12,11 +12,13 @@ export async function GET(req: Request) {
   const supabase = supabaseForRequest(req);
   const { searchParams } = new URL(req.url);
   const category = searchParams.get("category");
+  const docType = searchParams.get("docType");
   const from = searchParams.get("from");
   const to = searchParams.get("to");
   const search = searchParams.get("search");
 
   let query = supabase.from("invoices").select("*, invoice_items(*)");
+  if (docType === "invoice" || docType === "receipt") query = query.eq("doc_type", docType);
   if (category === "EVIV" || category === "ZMIV") query = query.eq("category", category);
   if (from) query = query.gte("invoice_date", from);
   if (to) query = query.lte("invoice_date", to);
@@ -28,11 +30,12 @@ export async function GET(req: Request) {
     return new Response(error.message, { status: 500 });
   }
 
-  const header = ["Invoice #", "Category", "Bill To", "Date", "Subtotal", "Sales Tax", "Discount", "Total"];
+  const header = ["No.", "Type", "Category", "Bill To", "Date", "Subtotal", "Sales Tax", "Discount", "Total"];
   const rows = (invoices ?? []).map((inv) => {
     const { subtotal, salesTax, total } = invoiceTotals(inv, inv.invoice_items);
     return [
       inv.invoice_no,
+      inv.doc_type,
       inv.category,
       inv.bill_to_name,
       inv.invoice_date,
