@@ -1,12 +1,14 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AuthGuard } from "@/components/AuthGuard";
 import { CategoryBadge } from "@/components/CategoryBadge";
 import { supabase } from "@/lib/supabase/client";
 import { downloadFromApi } from "@/lib/download";
+import { duplicateDocument } from "@/lib/documents";
 import { invoiceTotals, type DocType, type InvoiceCategory, type InvoiceWithItems } from "@/lib/types";
-import { formatRM } from "@/lib/company";
+import { docBasePath, formatRM } from "@/lib/company";
 
 type SortField = "invoice_date" | "invoice_no" | "bill_to_name" | "total";
 type SortDir = "asc" | "desc";
@@ -33,6 +35,8 @@ export function DocumentList({
   const [sortField, setSortField] = useState<SortField>("invoice_date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [dupId, setDupId] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     load();
@@ -96,6 +100,19 @@ export function DocumentList({
     if (!confirm("Delete this document? This cannot be undone.")) return;
     await supabase.from("invoices").delete().eq("id", id);
     load();
+  }
+
+  async function duplicate(inv: InvoiceWithItems) {
+    if (dupId) return;
+    setDupId(inv.id);
+    const today = new Date().toISOString().slice(0, 10);
+    const res = await duplicateDocument(inv, { docType: inv.doc_type, date: today });
+    if ("error" in res) {
+      setDupId(null);
+      alert(res.error);
+      return;
+    }
+    router.push(`${docBasePath(inv.doc_type)}/${res.id}/edit`);
   }
 
   async function exportZip() {
@@ -191,6 +208,13 @@ export function DocumentList({
                   <td className="p-2">{inv.invoice_date}</td>
                   <td className="p-2 text-right">{formatRM(total)}</td>
                   <td className="p-2 text-right whitespace-nowrap">
+                    <button
+                      onClick={() => duplicate(inv)}
+                      disabled={dupId === inv.id}
+                      className="text-xs text-neutral-500 hover:underline mr-3 disabled:opacity-50"
+                    >
+                      {dupId === inv.id ? "..." : "Duplicate"}
+                    </button>
                     <Link href={`${basePath}/${inv.id}/edit`} className="text-xs text-neutral-500 hover:underline mr-3">Edit</Link>
                     <button
                       onClick={() => downloadFromApi(`/api/invoices/${inv.id}/pdf`, `${inv.invoice_no}.pdf`)}
