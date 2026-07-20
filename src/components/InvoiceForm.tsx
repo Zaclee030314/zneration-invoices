@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { ClientPicker } from "./ClientPicker";
 import { LineItemsEditor, type DraftItem } from "./LineItemsEditor";
-import { CATEGORY_DEFAULTS, currentYymm, docBasePath, seriesPrefix, formatRM } from "@/lib/company";
+import { CATEGORY_DEFAULTS, DOC_TITLE, currentYymm, docBasePath, seriesPrefix, formatRM } from "@/lib/company";
 import type { Client, DocType, InvoiceCategory, InvoiceWithItems } from "@/lib/types";
 
 function newItem(description = "", line_total = ""): DraftItem {
@@ -14,7 +14,7 @@ function newItem(description = "", line_total = ""): DraftItem {
 // Friendlier message for the unique(owner_id, invoice_no) violation.
 function dupMessage(msg: string, no: string): string {
   if (/duplicate|unique/i.test(msg)) {
-    return `Invoice number "${no}" already exists. Choose a different number.`;
+    return `Document number "${no}" already exists. Choose a different number.`;
   }
   return msg;
 }
@@ -157,7 +157,7 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
     const finalNo = invoiceNo.trim();
     if (!finalNo) {
       setSaving(false);
-      return setErr("Invoice number is required.");
+      return setErr(`${DOC_TITLE[docKind]} number is required.`);
     }
 
     let invoiceId = existing?.id;
@@ -224,7 +224,7 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-sm text-neutral-500">Invoice #</label>
+            <label className="text-sm text-neutral-500">{DOC_TITLE[docKind]} #</label>
             <input
               className="border rounded px-2 py-1 text-sm font-mono w-36"
               value={invoiceNo}
@@ -253,7 +253,7 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
             <ClientPicker value={clientId} onSelect={selectClient} onAddNew={addNewClient} />
           </div>
           <div>
-            <label className="text-xs text-neutral-500">Invoice Date</label>
+            <label className="text-xs text-neutral-500">{DOC_TITLE[docKind]} Date</label>
             <input
               type="date"
               className="w-full border rounded px-3 py-2 text-sm"
@@ -332,7 +332,7 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
 
       <div className="flex gap-2">
         <button disabled={saving} className="bg-neutral-900 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
-          {saving ? "Saving..." : isEdit ? "Save Changes" : "Create Invoice"}
+          {saving ? "Saving..." : isEdit ? "Save Changes" : `Create ${DOC_TITLE[docKind]}`}
         </button>
         <button type="button" onClick={() => router.back()} className="px-4 py-2 rounded text-sm border">
           Cancel

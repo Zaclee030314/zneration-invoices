@@ -1,5 +1,5 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
-import { COMPANY, DOC_TITLE, DOC_NUMBER_LABEL, formatRM } from "./company";
+import { COMPANY, DOC_TITLE, DOC_NUMBER_LABEL, docFooter, formatRM } from "./company";
 import { invoiceTotals, type InvoiceItem, type Invoice } from "./types";
 
 const BLUE = "#1f4e79";
@@ -125,11 +125,9 @@ export function InvoicePdfDocument({ invoice, items }: { invoice: Invoice; items
         </View>
 
         <View style={styles.footer}>
-          <Text>Make all checks payable to {COMPANY.name}</Text>
-          <Text style={{ fontFamily: "Helvetica-Bold", marginTop: 6 }}>Thank you for your business!</Text>
-          <Text style={styles.footerLine}>
-            Should you have any enquiries concerning this invoice, please contact {COMPANY.contact} on {COMPANY.tel}
-          </Text>
+          <Text>{docFooter(invoice.doc_type).line1}</Text>
+          <Text style={{ fontFamily: "Helvetica-Bold", marginTop: 6 }}>{docFooter(invoice.doc_type).thanks}</Text>
+          <Text style={styles.footerLine}>{docFooter(invoice.doc_type).enquiry}</Text>
           <View style={styles.hr} />
           <Text>{COMPANY.address}</Text>
           <Text style={styles.footerLine}>

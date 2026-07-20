@@ -27,21 +27,43 @@ export const CATEGORY_DEFAULTS: Record<InvoiceCategory, { bankName: string; bank
   },
 };
 
-// Receipts get their own number series per bucket so they never collide with
-// invoices: event receipts EVRC…, marketing receipts ZMRC….
+// Receipts and quotations get their own number series per bucket so they never
+// collide with invoices: receipts EVRC/ZMRC, quotations EVQT/ZMQT.
 export const RECEIPT_PREFIX: Record<InvoiceCategory, string> = { EVIV: "EVRC", ZMIV: "ZMRC" };
+export const QUOTATION_PREFIX: Record<InvoiceCategory, string> = { EVIV: "EVQT", ZMIV: "ZMQT" };
 
 // The number-series key (and invoice_counters row) for a doc: invoices use the
-// category itself (EVIV/ZMIV); receipts use the receipt prefix (EVRC/ZMRC).
+// category itself (EVIV/ZMIV); receipts EVRC/ZMRC; quotations EVQT/ZMQT.
 export function seriesPrefix(docType: DocType, category: InvoiceCategory): string {
-  return docType === "receipt" ? RECEIPT_PREFIX[category] : category;
+  if (docType === "receipt") return RECEIPT_PREFIX[category];
+  if (docType === "quotation") return QUOTATION_PREFIX[category];
+  return category;
 }
 
-export const DOC_TITLE: Record<DocType, string> = { invoice: "Invoice", receipt: "Receipt" };
-export const DOC_NUMBER_LABEL: Record<DocType, string> = { invoice: "INV#", receipt: "RCP#" };
+export const DOC_TITLE: Record<DocType, string> = { invoice: "Invoice", receipt: "Receipt", quotation: "Quotation" };
+export const DOC_NUMBER_LABEL: Record<DocType, string> = { invoice: "INV#", receipt: "RCP#", quotation: "QT#" };
 
 export function docBasePath(docType: DocType): string {
-  return docType === "receipt" ? "/receipts" : "/invoices";
+  if (docType === "receipt") return "/receipts";
+  if (docType === "quotation") return "/quotations";
+  return "/invoices";
+}
+
+// Footer wording differs per document: quotations aren't payment requests, so
+// they carry a validity note instead of the check/thank-you lines.
+export function docFooter(docType: DocType): { line1: string; thanks: string; enquiry: string } {
+  if (docType === "quotation") {
+    return {
+      line1: "This quotation is valid for 30 days from the date shown above.",
+      thanks: "We look forward to working with you!",
+      enquiry: `Should you have any enquiries concerning this quotation, please contact ${COMPANY.contact} on ${COMPANY.tel}`,
+    };
+  }
+  return {
+    line1: `Make all checks payable to ${COMPANY.name}`,
+    thanks: "Thank you for your business!",
+    enquiry: `Should you have any enquiries concerning this ${docType}, please contact ${COMPANY.contact} on ${COMPANY.tel}`,
+  };
 }
 
 export function currentYymm(date = new Date()): string {

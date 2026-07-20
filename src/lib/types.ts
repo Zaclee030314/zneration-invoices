@@ -1,5 +1,5 @@
 export type InvoiceCategory = "EVIV" | "ZMIV";
-export type DocType = "invoice" | "receipt";
+export type DocType = "invoice" | "receipt" | "quotation";
 
 export interface Client {
   id: string;

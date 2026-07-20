@@ -7,7 +7,7 @@ import { CategoryBadge } from "@/components/CategoryBadge";
 import { supabase } from "@/lib/supabase/client";
 import { downloadFromApi } from "@/lib/download";
 import { invoiceTotals, type InvoiceWithItems } from "@/lib/types";
-import { COMPANY, DOC_TITLE, DOC_NUMBER_LABEL, docBasePath, formatRM } from "@/lib/company";
+import { COMPANY, DOC_TITLE, DOC_NUMBER_LABEL, docBasePath, docFooter, formatRM } from "@/lib/company";
 import { duplicateDocument } from "@/lib/documents";
 
 export function DocumentDetail({ id }: { id: string }) {
@@ -32,6 +32,18 @@ export function DocumentDetail({ id }: { id: string }) {
     setBusy(false);
     if ("error" in res) return alert(res.error);
     router.push(`/receipts/${res.id}`);
+  }
+
+  // Copy this quotation into a brand-new invoice (own EVIV/ZMIV number, today's
+  // date), then open it in the editor for final tweaks before sending.
+  async function generateInvoice() {
+    if (!invoice || busy) return;
+    setBusy(true);
+    const today = new Date().toISOString().slice(0, 10);
+    const res = await duplicateDocument(invoice, { docType: "invoice", date: today });
+    setBusy(false);
+    if ("error" in res) return alert(res.error);
+    router.push(`/invoices/${res.id}/edit`);
   }
 
   // Duplicate as the same type (next number, today's date), then open it in the
@@ -72,6 +84,11 @@ export function DocumentDetail({ id }: { id: string }) {
           {invoice.doc_type === "invoice" && (
             <button onClick={generateReceipt} disabled={busy} className="border rounded px-3 py-1.5 text-sm disabled:opacity-50">
               {busy ? "..." : "Generate Receipt"}
+            </button>
+          )}
+          {invoice.doc_type === "quotation" && (
+            <button onClick={generateInvoice} disabled={busy} className="border rounded px-3 py-1.5 text-sm disabled:opacity-50">
+              {busy ? "..." : "Generate Invoice"}
             </button>
           )}
           <Link href={`${docBasePath(invoice.doc_type)}/${invoice.id}/edit`} className="border rounded px-3 py-1.5 text-sm">Edit</Link>
@@ -149,9 +166,9 @@ export function DocumentDetail({ id }: { id: string }) {
         </div>
 
         <div className="text-center text-xs text-neutral-600 mt-8 space-y-1">
-          <p>Make all checks payable to {COMPANY.name}</p>
-          <p className="font-semibold text-sm text-black">Thank you for your business!</p>
-          <p>Should you have any enquiries concerning this invoice, please contact {COMPANY.contact} on {COMPANY.tel}</p>
+          <p>{docFooter(invoice.doc_type).line1}</p>
+          <p className="font-semibold text-sm text-black">{docFooter(invoice.doc_type).thanks}</p>
+          <p>{docFooter(invoice.doc_type).enquiry}</p>
           <hr className="my-2" />
           <p>{COMPANY.address}</p>
           <p>Tel: {COMPANY.tel} Fax: - E-mail: {COMPANY.email} Web: -</p>

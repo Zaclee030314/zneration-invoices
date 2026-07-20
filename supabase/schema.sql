@@ -16,7 +16,7 @@ create table if not exists invoices (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
   invoice_no text not null,
-  doc_type text not null default 'invoice' check (doc_type in ('invoice', 'receipt')),
+  doc_type text not null default 'invoice' check (doc_type in ('invoice', 'receipt', 'quotation')),
   category text not null check (category in ('EVIV', 'ZMIV')),
   client_id uuid references clients(id) on delete set null,
   bill_to_name text not null,
@@ -44,7 +44,7 @@ create table if not exists invoice_items (
 -- EVRC/ZMRC for receipts.
 create table if not exists invoice_counters (
   owner_id uuid not null references auth.users(id) on delete cascade,
-  category text not null check (category in ('EVIV', 'ZMIV', 'EVRC', 'ZMRC')),
+  category text not null check (category in ('EVIV', 'ZMIV', 'EVRC', 'ZMRC', 'EVQT', 'ZMQT')),
   yymm text not null,
   last_seq int not null default 0,
   primary key (owner_id, category, yymm)

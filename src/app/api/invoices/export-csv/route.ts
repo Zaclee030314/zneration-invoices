@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   const search = searchParams.get("search");
 
   let query = supabase.from("invoices").select("*, invoice_items(*)");
-  if (docType === "invoice" || docType === "receipt") query = query.eq("doc_type", docType);
+  if (docType === "invoice" || docType === "receipt" || docType === "quotation") query = query.eq("doc_type", docType);
   if (category === "EVIV" || category === "ZMIV") query = query.eq("category", category);
   if (from) query = query.gte("invoice_date", from);
   if (to) query = query.lte("invoice_date", to);
