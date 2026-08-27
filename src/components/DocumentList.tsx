@@ -36,6 +36,8 @@ export function DocumentList({
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dupId, setDupId] = useState<string | null>(null);
+  const [bulkMonth, setBulkMonth] = useState(() => nextMonthValue());
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -115,6 +117,30 @@ export function DocumentList({
     router.push(`${docBasePath(inv.doc_type)}/${res.id}/edit`);
   }
 
+  // Duplicates every selected document into the chosen month, keeping each
+  // document's day-of-month (clamped for shorter months, e.g. 31st -> Feb 28).
+  // Runs sequentially so the per-series monthly counters assign unique numbers.
+  async function bulkDuplicate() {
+    if (!selected.size || bulkProgress || !bulkMonth) return;
+    const docs = rows.filter((r) => selected.has(r.inv.id)).map((r) => r.inv);
+    if (!confirm(`Duplicate ${docs.length} document(s) into ${bulkMonth}?`)) return;
+    setBulkProgress({ done: 0, total: docs.length });
+    const errors: string[] = [];
+    for (let i = 0; i < docs.length; i++) {
+      const inv = docs[i];
+      const res = await duplicateDocument(inv, {
+        docType: inv.doc_type,
+        date: dateInMonth(inv.invoice_date, bulkMonth),
+      });
+      if ("error" in res) errors.push(`${inv.invoice_no}: ${res.error}`);
+      setBulkProgress({ done: i + 1, total: docs.length });
+    }
+    setBulkProgress(null);
+    setSelected(new Set());
+    if (errors.length) alert(`Some duplicates failed:\n${errors.join("\n")}`);
+    load();
+  }
+
   async function exportZip() {
     if (!selected.size) return;
     await downloadFromApi("/api/invoices/export-zip", `${docType}s.zip`, {
@@ -165,7 +191,21 @@ export function DocumentList({
           <input type="date" className="border rounded px-3 py-1.5 text-sm" value={from} onChange={(e) => setFrom(e.target.value)} />
           <span className="text-sm text-neutral-400">to</span>
           <input type="date" className="border rounded px-3 py-1.5 text-sm" value={to} onChange={(e) => setTo(e.target.value)} />
-          <div className="ml-auto flex gap-2">
+          <div className="ml-auto flex gap-2 items-center">
+            <input
+              type="month"
+              className="border rounded px-2 py-1.5 text-sm"
+              title="Target month for bulk duplicate"
+              value={bulkMonth}
+              onChange={(e) => setBulkMonth(e.target.value)}
+            />
+            <button
+              onClick={bulkDuplicate}
+              disabled={!selected.size || !!bulkProgress || !bulkMonth}
+              className="text-sm border rounded px-3 py-1.5 disabled:opacity-40"
+            >
+              {bulkProgress ? `Duplicating ${bulkProgress.done}/${bulkProgress.total}...` : `Duplicate (${selected.size})`}
+            </button>
             <button onClick={exportZip} disabled={!selected.size} className="text-sm border rounded px-3 py-1.5 disabled:opacity-40">
               Export ZIP ({selected.size})
             </button>
@@ -234,6 +274,23 @@ export function DocumentList({
       </div>
     </AuthGuard>
   );
+}
+
+// "YYYY-MM" for the month after the current one (default bulk-duplicate target).
+function nextMonthValue(): string {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Moves a "YYYY-MM-DD" date into the target "YYYY-MM" month, clamping the day
+// to the target month's length (e.g. Jan 31 -> Feb 28).
+function dateInMonth(sourceDate: string, targetMonth: string): string {
+  const day = Number(sourceDate.slice(8, 10)) || 1;
+  const [y, m] = targetMonth.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return `${targetMonth}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
 }
 
 function Th({
