@@ -1,6 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
-import { AuthGuard } from "@/components/AuthGuard";
+import { Suspense, useEffect, useState } from "react";
 import { InvoiceForm } from "@/components/InvoiceForm";
 import { supabase } from "@/lib/supabase/client";
 import { DOC_TITLE } from "@/lib/company";
@@ -23,17 +22,19 @@ export function DocumentEdit({ id }: { id: string }) {
   }, [id]);
 
   return (
-    <AuthGuard>
+    <>
       <h1 className="text-2xl font-semibold mb-6">
         {invoice ? `Edit ${DOC_TITLE[invoice.doc_type]}` : "Edit"}
       </h1>
       {loading ? (
         <p className="text-sm text-neutral-500">Loading...</p>
       ) : invoice ? (
-        <InvoiceForm existing={invoice} />
+        <Suspense fallback={<p className="text-sm text-neutral-500">Loading...</p>}>
+          <InvoiceForm existing={invoice} />
+        </Suspense>
       ) : (
         <p>Not found.</p>
       )}
-    </AuthGuard>
+    </>
   );
 }

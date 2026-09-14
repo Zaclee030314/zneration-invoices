@@ -1,78 +1,126 @@
-# Zneration Invoices
+# Zneration Hub
 
-Invoice generator for **Zneration Media M Sdn Bhd**, replacing the old Excel +
-Python-script workflow. Auto-numbers, stores, and exports invoices under two
-categories:
+Internal project-management system for **Zneration Media (M) Sdn Bhd**, built on
+top of the original invoice generator. One login, one workspace shared by the
+team, covering:
 
-- **EVIV** — Event invoices (booth rentals, bazaars, markets)
-- **ZMIV** — Other invoices (marketing / AI retainers)
+- **Clients & pipeline** — client directory with contacts and notes; every
+  engagement is a *project* that moves through lead → proposal → active → beta →
+  handover → done (or dormant / lost) on a drag-and-drop pipeline board.
+- **Projects, milestones & tasks** — kanban and list views, priorities,
+  assignees, due dates, comments, and an automatic activity log.
+- **Quotations, invoices & receipts** — the original generator (EVIV / ZMIV
+  number series, branded PDFs, CSV/ZIP export), now linked to projects, with
+  payment schedules (e.g. 30/25/25/20), recorded payments and
+  unpaid / partial / paid / overdue status.
+- **Time tracking** — one-click timer per task, manual logs, weekly and
+  per-project totals.
+- **Content calendar** — deliverables and posts by channel (Instagram,
+  Facebook, TikTok, Xiaohongshu, Google Ads, ...) with status and assignee.
+- **AI hooks** — an `ai_runs` table and `/api/ai/<feature>` route are in place
+  for later features (brief → tasks, weekly client summary). Nothing ships yet.
 
 ## Stack
-- Next.js 14 (App Router, TypeScript)
-- Supabase (Postgres + Auth)
-- Tailwind CSS
-- `@react-pdf/renderer` for branded PDF generation (no headless Chromium needed)
-- `jszip` for bulk PDF export
 
-## One-time setup
+Next.js 14 (App Router, TypeScript) · Supabase (Postgres, Auth, RLS) ·
+Tailwind CSS 3 + shadcn/ui (Radix) · @dnd-kit · @react-pdf/renderer · jszip ·
+Vercel.
+
+All data access happens in the browser through the Supabase client; Row Level
+Security scopes every row to the caller's workspace. The only server routes are
+PDF/CSV/ZIP export, team invites (service role) and the AI dispatcher.
+
+## Setup
 
 ### 1. Install
+
 ```bash
 npm install
 ```
 
-### 2. Create a Supabase project
-Go to https://supabase.com → New project. Copy the **Project URL** and **anon key**
-from Settings → API.
+### 2. Environment
 
-### 3. Configure env
-Copy `.env.local.example` → `.env.local` and fill in:
+Copy `.env.local.example` → `.env.local`:
+
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...      # server only; needed to invite teammates
+ANTHROPIC_API_KEY=                    # optional; enables /api/ai when set
 ```
 
-### 4. Create the schema
-In Supabase → SQL Editor, paste & run the contents of `supabase/schema.sql`.
-This creates `clients`, `invoices`, `invoice_items`, `invoice_counters`, the
-`next_invoice_no()` numbering function, and Row Level Security policies that
-restrict all data to your own account.
+### 3. Database
 
-### 5. Run locally
+Migrations live in `supabase/migrations/` and are safe to re-run:
+
+| File | What it does |
+|---|---|
+| `000_baseline.sql` | Original invoice schema (fresh projects only) |
+| `001_workspaces.sql` | Workspaces, members, profiles; moves data to workspace ownership; atomic numbering RPCs |
+| `002_invites.sql` | Invites + auto-join trigger on signup |
+| `003_crm.sql` | Client fields, contacts, notes, projects |
+| `004_projects_tasks.sql` | Milestones, tasks, comments, activity log |
+| `005_finance.sql` | Project links on documents, payment schedules, payments, balance views |
+| `006_time_content.sql` | Time entries, content items |
+| `007_ai.sql` | AI run log |
+
+**Existing database (already running the invoice generator):**
+1. Take a backup: Supabase Dashboard → Database → Backups.
+2. In the SQL Editor run `001` through `007` in order (or paste
+   `supabase/ALL_001_to_007.sql` in one go).
+3. Sign in once with your existing account. You are the workspace admin.
+
+**Fresh database:** run `000` first, then `001`–`007`, then create your first
+user in Authentication → Users (invite or "Add user") and sign in.
+
+### 4. Auth settings (Supabase Dashboard → Authentication)
+
+- **Providers → Email:** turn off *Allow new users to sign up* (the app is
+  invite-only; invites still work).
+- **URL configuration:** Site URL = your deployed URL; add
+  `http://localhost:3000/auth/confirm` and `https://<your-domain>/auth/confirm`
+  to Redirect URLs.
+- **Email templates → Invite user:** point the link at
+  `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite`
+  (the default `{{ .ConfirmationURL }}` also works).
+
+### 5. Seed the real projects (optional)
+
+After signing in once, run `supabase/seed/zneration_seed.sql` in the SQL
+Editor. It creates the current clients, engagements, milestones, a few tasks,
+the Wang Cheng 30-day content plan and the Wish Day 2027 payment schedule. It is
+idempotent and contains no credentials.
+
+### 6. Run
+
 ```bash
 npm run dev
 ```
-Open http://localhost:3000, click **Sign in → Create account** to make your
-owner login, then **+ New Invoice**.
 
-## How invoice numbering works
-Each invoice gets `{PREFIX}{YY}{MM}-{seq}`, e.g. `EVIV2607-04` or `ZMIV2607-01`.
-The sequence resets every month, per category, and is assigned atomically on
-save via the `next_invoice_no()` Postgres function — the number shown while
-editing is only a preview.
+Open http://localhost:3000 and sign in. Invite teammates from **Settings → Team**.
 
-## Category defaults
-Picking EVIV or ZMIV on the invoice form auto-fills the bank account and
-special notes (editable per invoice):
-- **EVIV** → PBB `3243091730`, includes the event cancellation/refund note
-- **ZMIV** → UOB `9113012893`
+## How things fit together
 
-## Exports
-- **PDF** — per-invoice, styled to match the original branded template.
-- **ZIP** — select multiple invoices on the dashboard → Export ZIP.
-- **CSV** — respects the dashboard's current filters (category/date/search) →
-  Export CSV, opens cleanly in Excel.
+- **Workspace** — one row in `workspaces`; `workspace_members` carries the
+  role (`admin` / `member`). Every table has `workspace_id` with a default of
+  the caller's workspace, so inserts never need to pass it.
+- **Numbering** — `{PREFIX}{YY}{MM}-{seq}` per series (EVIV/ZMIV invoices,
+  EVRC/ZMRC receipts, EVQT/ZMQT quotations), reserved atomically by
+  `next_invoice_no()` at save time. Hand-typed numbers bump the counter through
+  `sync_invoice_counter()`.
+- **Finance** — `invoice_balances` (view) derives total / paid / balance /
+  status per document from line items and payments; `project_schedule_view`
+  turns a project's payment schedule into expected amounts and links each row
+  to the invoice generated from it.
+- **Activity** — triggers write `activity_log` rows for task and project
+  changes and recorded payments; the dashboard and project overview read it.
+- **Time** — a partial unique index allows one running timer per person;
+  starting a new one stops the previous.
 
 ## Deploy to Vercel
-1. Push this repo to GitHub.
-2. Import in Vercel → set the two `NEXT_PUBLIC_*` env vars → deploy.
 
-## Data model
-- `clients` — reusable directory (name, reg no., address, default category)
-- `invoices` — one row per invoice, snapshots the Bill To details at creation
-  time so later edits to a client don't rewrite historical invoices
-- `invoice_items` — line items per invoice (amount is optional, so you can add
-  unpriced description bullets like the current marketing invoices do)
-- `invoice_counters` — backs the atomic per-category-per-month numbering
+1. Push to GitHub and import the repo in Vercel.
+2. Set the four env vars above (the AI key may be empty).
+3. Add the Vercel domain to Supabase Auth redirect URLs.
 
-Row-Level Security restricts every row to its owner — only you see your data.
+PDF and ZIP routes declare `runtime = "nodejs"` and a 60 s `maxDuration`.

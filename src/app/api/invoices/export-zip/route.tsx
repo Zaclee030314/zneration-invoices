@@ -3,6 +3,10 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { supabaseForRequest } from "@/lib/supabase/server";
 import { InvoicePdfDocument } from "@/lib/InvoicePdfDocument";
 
+// react-pdf needs the Node runtime; PDF/ZIP generation can take a few seconds.
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   const { ids }: { ids: string[] } = await req.json();
   if (!ids?.length) {

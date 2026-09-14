@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 export default function Home() {
   const router = useRouter();
   useEffect(() => {
-    router.replace("/invoices");
+    router.replace("/dashboard");
   }, [router]);
   return null;
 }

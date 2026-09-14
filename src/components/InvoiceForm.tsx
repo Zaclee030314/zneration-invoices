@@ -1,11 +1,16 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { ClientPicker } from "./ClientPicker";
+import { ProjectPicker } from "./ProjectPicker";
 import { LineItemsEditor, type DraftItem } from "./LineItemsEditor";
 import { CATEGORY_DEFAULTS, DOC_TITLE, currentYymm, docBasePath, seriesPrefix, formatRM } from "@/lib/company";
-import type { Client, DocType, InvoiceCategory, InvoiceWithItems } from "@/lib/types";
+import { defaultDueDate } from "@/lib/finance";
+import { loadDocumentPrefill } from "@/lib/documents";
+import { linkScheduleInvoice } from "@/lib/queries/finance";
+import type { Client, DocType, InvoiceCategory, InvoiceWithItems, ProjectWithClient } from "@/lib/types";
 
 function newItem(description = "", line_total = ""): DraftItem {
   return { key: crypto.randomUUID(), description, line_total };
@@ -21,39 +26,42 @@ function dupMessage(msg: string, no: string): string {
 
 // Raise the per-series monthly counter to at least this number's sequence, so
 // the next auto-suggestion continues ascending (handles skipped/manual numbers).
-// `series` is the number prefix (EVIV/ZMIV for invoices, EVRC/ZMRC for receipts).
-async function syncCounter(series: string, invoiceNo: string, ownerId: string) {
+// Runs as an atomic RPC so concurrent users never race on the counter row.
+async function syncCounter(series: string, invoiceNo: string) {
   const m = invoiceNo.match(/(\d{4})-(\d+)\s*$/);
   if (!m) return;
-  const yymm = m[1];
   const seq = parseInt(m[2], 10);
   if (!seq) return;
-  const { data } = await supabase
-    .from("invoice_counters")
-    .select("last_seq")
-    .eq("category", series)
-    .eq("yymm", yymm)
-    .maybeSingle();
-  if (!data) {
-    await supabase.from("invoice_counters").insert({ owner_id: ownerId, category: series, yymm, last_seq: seq });
-  } else if (seq > data.last_seq) {
-    await supabase.from("invoice_counters").update({ last_seq: seq }).eq("category", series).eq("yymm", yymm);
-  }
+  await supabase.rpc("sync_invoice_counter", { p_category: series, p_yymm: m[1], p_seq: seq });
 }
 
+async function loadClient(id: string): Promise<Client | null> {
+  const { data } = await supabase.from("clients").select("*").eq("id", id).maybeSingle();
+  return (data as Client | null) ?? null;
+}
+
+// Callers of this form must sit under <Suspense> (useSearchParams).
 export function InvoiceForm({ existing, docType = "invoice" }: { existing?: InvoiceWithItems; docType?: DocType }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isEdit = !!existing;
   // Document type is fixed for the life of the form (set by the route, or kept
   // from the record being edited) — it drives the number series and the title.
   const docKind: DocType = existing?.doc_type ?? docType;
+  const hasDueDate = docKind === "invoice";
 
   const [category, setCategory] = useState<InvoiceCategory>(existing?.category ?? "EVIV");
   const [clientId, setClientId] = useState<string | null>(existing?.client_id ?? null);
+  const [projectId, setProjectId] = useState<string | null>(existing?.project_id ?? null);
   const [billToName, setBillToName] = useState(existing?.bill_to_name ?? "");
   const [billToRegNo, setBillToRegNo] = useState(existing?.bill_to_reg_no ?? "");
   const [billToAddress, setBillToAddress] = useState(existing?.bill_to_address ?? "");
   const [invoiceDate, setInvoiceDate] = useState(existing?.invoice_date ?? new Date().toISOString().slice(0, 10));
+  const [dueDate, setDueDate] = useState(
+    existing ? existing.due_date ?? "" : hasDueDate ? defaultDueDate(new Date().toISOString().slice(0, 10)) : ""
+  );
+  // Once the user (or a schedule prefill) sets the due date, stop re-deriving it.
+  const [dueTouched, setDueTouched] = useState(isEdit);
   const [bankName, setBankName] = useState(existing?.bank_name ?? CATEGORY_DEFAULTS.EVIV.bankName);
   const [bankAccount, setBankAccount] = useState(existing?.bank_account ?? CATEGORY_DEFAULTS.EVIV.bankAccount);
   const [specialNotes, setSpecialNotes] = useState(existing?.special_notes ?? CATEGORY_DEFAULTS.EVIV.specialNotes);
@@ -69,8 +77,11 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
   const [invoiceNo, setInvoiceNo] = useState<string>(existing?.invoice_no ?? "");
   // Once the user hand-edits the number, stop auto-overwriting it from the preview.
   const [manualNo, setManualNo] = useState<boolean>(isEdit);
+  const [scheduleId, setScheduleId] = useState<string | null>(null);
+  const [scheduleLabel, setScheduleLabel] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const prefilled = useRef(false);
 
   // Suggest the next invoice number for the chosen category+month. This is only
   // a suggestion — the field stays editable, and the number is saved as typed.
@@ -90,6 +101,38 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
       });
   }, [category, invoiceDate, manualNo, docKind]);
 
+  // Due date follows the invoice date (+30 days) until the user edits it.
+  useEffect(() => {
+    if (!hasDueDate || dueTouched) return;
+    setDueDate(defaultDueDate(invoiceDate));
+  }, [invoiceDate, hasDueDate, dueTouched]);
+
+  // Prefill from ?project= / ?schedule= / ?client= when creating.
+  useEffect(() => {
+    if (isEdit || prefilled.current) return;
+    prefilled.current = true;
+    const qProject = searchParams.get("project");
+    const qSchedule = searchParams.get("schedule");
+    const qClient = searchParams.get("client");
+    if (!qProject && !qSchedule && !qClient) return;
+
+    loadDocumentPrefill({ project: qProject, schedule: qSchedule, client: qClient }).then((p) => {
+      if (p.error) toast.error(p.error);
+      if (p.item) setItems([newItem(p.item.description, p.item.line_total)]);
+      if (p.dueDate && hasDueDate) {
+        setDueDate(p.dueDate);
+        setDueTouched(true);
+      }
+      if (p.schedule) {
+        setScheduleId(p.schedule.id);
+        setScheduleLabel(p.schedule.label);
+      }
+      if (p.project) setProjectId(p.project.id);
+      if (p.client) selectClient(p.client);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, searchParams]);
+
   function applyCategoryDefaults(cat: InvoiceCategory) {
     setCategory(cat);
     if (!isEdit) {
@@ -106,6 +149,15 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
       setBillToRegNo(client.reg_no ?? "");
       setBillToAddress(client.address ?? "");
       if (client.default_category) applyCategoryDefaults(client.default_category);
+    }
+  }
+
+  async function selectProject(project: ProjectWithClient | null) {
+    setProjectId(project?.id ?? null);
+    // A project with a client and no client chosen yet fills Bill To.
+    if (project?.client_id && !clientId) {
+      const client = await loadClient(project.client_id);
+      if (client) selectClient(client);
     }
   }
 
@@ -130,23 +182,16 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
     if (!items.some((it) => it.description.trim())) return setErr("Add at least one line item.");
     setSaving(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      setSaving(false);
-      return setErr("Not signed in.");
-    }
-
     const payload = {
-      owner_id: user.id,
       doc_type: docKind,
       category,
       client_id: clientId,
+      project_id: projectId,
       bill_to_name: billToName.trim(),
       bill_to_reg_no: billToRegNo.trim() || null,
       bill_to_address: billToAddress.trim() || null,
       invoice_date: invoiceDate,
+      due_date: hasDueDate && dueDate ? dueDate : null,
       bank_name: bankName.trim() || null,
       bank_account: bankAccount.trim() || null,
       sales_tax_rate: taxRate,
@@ -154,7 +199,21 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
       special_notes: specialNotes.trim() || null,
     };
 
-    const finalNo = invoiceNo.trim();
+    // Auto numbers are reserved atomically at save time (the preview shown in
+    // the field is only a hint). Hand-typed numbers are saved as typed.
+    const series = seriesPrefix(docKind, category);
+    let finalNo = invoiceNo.trim();
+    if (!isEdit && !manualNo) {
+      const { data: reserved, error: rpcErr } = await supabase.rpc("next_invoice_no", {
+        p_category: series,
+        p_yymm: currentYymm(new Date(invoiceDate)),
+      });
+      if (rpcErr || !reserved) {
+        setSaving(false);
+        return setErr(rpcErr?.message ?? "Could not reserve a document number.");
+      }
+      finalNo = reserved as string;
+    }
     if (!finalNo) {
       setSaving(false);
       return setErr(`${DOC_TITLE[docKind]} number is required.`);
@@ -183,12 +242,16 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
         return setErr(dupMessage(error?.message ?? "Failed to create invoice.", finalNo));
       }
       invoiceId = inserted.id;
+      if (scheduleId && invoiceId) {
+        const linked = await linkScheduleInvoice(scheduleId, invoiceId);
+        if (linked.error) toast.error(`Created, but could not link to the payment schedule: ${linked.error}`);
+      }
     }
 
     // Keep the per-category monthly counter at least as high as this number's
-    // sequence, so future auto-suggestions stay ascending and don't collide —
-    // even when the number was entered/skipped manually.
-    await syncCounter(seriesPrefix(docKind, category), finalNo, user.id);
+    // sequence, so future auto-suggestions stay ascending and don't collide
+    // when the number was entered/skipped manually.
+    if (isEdit || manualNo) await syncCounter(series, finalNo);
 
     const itemRows = items
       .filter((it) => it.description.trim())
@@ -208,6 +271,11 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
   return (
     <form onSubmit={save} className="space-y-6 max-w-3xl">
       {err && <p className="text-red-600 text-sm">{err}</p>}
+      {scheduleLabel && (
+        <p className="text-xs text-neutral-600 bg-neutral-50 border rounded px-3 py-2">
+          This {DOC_TITLE[docKind].toLowerCase()} will be linked to the payment schedule row <span className="font-medium">{scheduleLabel}</span>.
+        </p>
+      )}
 
       <div className="bg-white border rounded p-4 space-y-4">
         <div className="flex gap-4 items-center">
@@ -253,6 +321,13 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
             <ClientPicker value={clientId} onSelect={selectClient} onAddNew={addNewClient} />
           </div>
           <div>
+            <label className="text-xs text-neutral-500">Project</label>
+            <ProjectPicker value={projectId} onSelect={selectProject} clientId={clientId} placeholder="Link to a project (optional)" />
+          </div>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
             <label className="text-xs text-neutral-500">{DOC_TITLE[docKind]} Date</label>
             <input
               type="date"
@@ -262,6 +337,20 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
               required
             />
           </div>
+          {hasDueDate && (
+            <div>
+              <label className="text-xs text-neutral-500">Due Date</label>
+              <input
+                type="date"
+                className="w-full border rounded px-3 py-2 text-sm"
+                value={dueDate}
+                onChange={(e) => {
+                  setDueTouched(true);
+                  setDueDate(e.target.value);
+                }}
+              />
+            </div>
+          )}
         </div>
 
         <div className="grid sm:grid-cols-2 gap-4">
