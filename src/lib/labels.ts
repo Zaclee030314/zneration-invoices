@@ -80,6 +80,7 @@ export const INVOICE_STATUSES: { value: InvoiceStatus; label: string; color: str
   { value: "partial", label: "Partial", color: "bg-amber-100 text-amber-800" },
   { value: "paid", label: "Paid", color: "bg-emerald-100 text-emerald-800" },
   { value: "overdue", label: "Overdue", color: "bg-red-100 text-red-800" },
+  { value: "refunded", label: "Refunded", color: "bg-sky-100 text-sky-800" },
   { value: "void", label: "Void", color: "bg-neutral-200 text-neutral-500 line-through" },
 ];
 export const INVOICE_STATUS_LABEL = Object.fromEntries(INVOICE_STATUSES.map((s) => [s.value, s.label])) as Record<InvoiceStatus, string>;

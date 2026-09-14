@@ -14,6 +14,7 @@ import { COMPANY, DOC_TITLE, DOC_NUMBER_LABEL, docBasePath, docFooter, formatRM 
 import { duplicateDocument, unvoidDocument, voidDocument } from "@/lib/documents";
 import { fetchBalance, fetchPaymentsForInvoice } from "@/lib/queries/finance";
 import { formatDate } from "@/lib/labels";
+import { isClosedInvoiceStatus } from "@/lib/finance";
 import { cn } from "@/lib/utils";
 
 type ProjectRef = Pick<Project, "id" | "code" | "name">;
@@ -124,7 +125,7 @@ export function DocumentDetail({ id }: { id: string }) {
           {isInvoice && <InvoiceStatusBadge status={status} />}
         </div>
         <div className="flex gap-2 flex-wrap">
-          {isInvoice && !isVoid && status !== "paid" && (
+          {isInvoice && !isClosedInvoiceStatus(status) && status !== "paid" && (
             <button onClick={() => setPayMode("payment")} disabled={busy} className="border border-emerald-600 text-emerald-700 rounded px-3 py-1.5 text-sm disabled:opacity-50">
               Record payment
             </button>

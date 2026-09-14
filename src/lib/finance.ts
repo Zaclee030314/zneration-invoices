@@ -1,6 +1,7 @@
-// Pure finance helpers (no I/O). The SQL views in 005_finance.sql are the
-// source of truth for balances/status; these mirror them for optimistic UI and
-// for rows that haven't been round-tripped through the view yet.
+// Pure finance helpers (no I/O). The SQL views (invoice_balances in 009,
+// project_schedule_view in 005) are the source of truth for balances/status;
+// these mirror them for optimistic UI and for rows that haven't been
+// round-tripped through the view yet.
 import type { DocType, InvoiceStatus } from "./types";
 
 // Expected amount of a schedule row: fixed amount wins, otherwise a percentage
@@ -21,6 +22,7 @@ export function deriveInvoiceStatus(
   doc: {
     total: number;
     paid_total: number;
+    refunded_total?: number;
     due_date: string | null;
     voided_at: string | null;
     doc_type: DocType;
@@ -30,10 +32,16 @@ export function deriveInvoiceStatus(
   if (doc.doc_type !== "invoice") return null;
   if (doc.voided_at) return "void";
   const paid = doc.paid_total ?? 0;
+  if ((doc.refunded_total ?? 0) > 0 && paid <= 0) return "refunded";
   if (paid >= doc.total && doc.total > 0) return "paid";
   if (paid > 0) return "partial";
   if (doc.due_date && doc.due_date < today) return "overdue";
   return "unpaid";
+}
+
+// Void and fully refunded invoices are closed: nothing is owed on them.
+export function isClosedInvoiceStatus(status: InvoiceStatus | null | undefined): boolean {
+  return status === "void" || status === "refunded";
 }
 
 // Adds a number of days to a "YYYY-MM-DD" string without timezone drift.
@@ -124,7 +132,7 @@ export function scheduleTotals(
   for (const r of rows) {
     percent += Number(r.percent ?? 0);
     expected += Number(r.expected_amount ?? 0);
-    if (r.invoice_id && r.invoice_status !== "void") {
+    if (r.invoice_id && !isClosedInvoiceStatus(r.invoice_status)) {
       invoiced += Number(r.invoice_total ?? 0);
       paid += Number(r.paid_total ?? 0);
     }

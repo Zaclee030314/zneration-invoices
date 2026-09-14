@@ -209,7 +209,7 @@ export interface InvoiceWithItems extends Invoice {
   invoice_items: InvoiceItem[];
 }
 
-export type InvoiceStatus = "unpaid" | "partial" | "paid" | "overdue" | "void";
+export type InvoiceStatus = "unpaid" | "partial" | "paid" | "overdue" | "refunded" | "void";
 
 // Row shape of the invoice_balances view.
 export interface InvoiceBalance {

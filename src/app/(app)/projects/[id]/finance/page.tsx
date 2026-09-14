@@ -4,6 +4,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { useProject } from "@/lib/project-context";
 import { InvoiceStatusBadge } from "@/components/finance/InvoiceStatusBadge";
+import { isClosedInvoiceStatus } from "@/lib/finance";
 import { ScheduleEditor } from "@/components/finance/ScheduleEditor";
 import { PaymentsList } from "@/components/finance/PaymentsList";
 import {
@@ -80,7 +81,7 @@ export default function ProjectFinancePage() {
 
   const quotations = docs.filter((d) => d.doc_type === "quotation");
   const accepted = quotations.find((q) => q.id === project.quotation_id) ?? null;
-  const invoices = docs.filter((d) => d.doc_type === "invoice" && d.status !== "void");
+  const invoices = docs.filter((d) => d.doc_type === "invoice" && !isClosedInvoiceStatus(d.status));
   const invoiced = invoices.reduce((s, d) => s + Number(d.total), 0);
   const paid = invoices.reduce((s, d) => s + Number(d.paid_total), 0);
 

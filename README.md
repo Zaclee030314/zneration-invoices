@@ -63,12 +63,13 @@ Migrations live in `supabase/migrations/` and are safe to re-run:
 | `005_finance.sql` | Project links on documents, payment schedules, payments, balance views |
 | `006_time_content.sql` | Time entries, content items |
 | `007_ai.sql` | AI run log |
-| `008_attachments.sql` | Private `attachments` storage bucket and payment slips (`payments.slip_path`) |
+| `008_attachments.sql` | Private `attachments` storage bucket, payment slips (`payments.slip_path`) and refunds (`payments.kind`) |
+| `009_refunded_status.sql` | Invoices whose refunds cancel out all payments show as Refunded with nothing owed |
 
 **Existing database (already running the invoice generator):**
 1. Take a backup: Supabase Dashboard → Database → Backups.
 2. In the SQL Editor run `001` through `007` in order (or paste
-   `supabase/ALL_001_to_007.sql` in one go), then `008`.
+   `supabase/ALL_001_to_007.sql` in one go), then `008` and `009`.
 3. Sign in once with your existing account. You are the workspace admin.
 
 **Fresh database:** run `000` first, then `001`–`007`, then create your first

@@ -11,6 +11,7 @@ import { supabase } from "@/lib/supabase/client";
 import { downloadFromApi } from "@/lib/download";
 import { duplicateDocument } from "@/lib/documents";
 import { fetchBalances } from "@/lib/queries/finance";
+import { isClosedInvoiceStatus } from "@/lib/finance";
 import { invoiceTotals, type DocType, type InvoiceBalance, type InvoiceCategory, type InvoiceStatus, type InvoiceWithItems } from "@/lib/types";
 import { INVOICE_STATUSES, formatDate } from "@/lib/labels";
 import { docBasePath, formatRM } from "@/lib/company";
@@ -117,7 +118,7 @@ export function DocumentList({
   }, [rowsRaw, balances, category, status, from, to, search, sortField, sortDir, isInvoice]);
 
   const sums = useMemo(() => {
-    const live = rows.filter((r) => r.status !== "void");
+    const live = rows.filter((r) => !isClosedInvoiceStatus(r.status));
     return {
       total: live.reduce((s, r) => s + r.total, 0),
       paid: live.reduce((s, r) => s + r.paid, 0),
@@ -281,6 +282,7 @@ export function DocumentList({
             <tbody>
               {rows.map(({ inv, total, paid, balance, status: st }) => {
                 const voided = st === "void";
+                const closed = isClosedInvoiceStatus(st);
                 const strike = voided ? "line-through text-neutral-400" : "";
                 return (
                   <tr key={inv.id} className="border-b last:border-0 hover:bg-neutral-50">
@@ -299,9 +301,9 @@ export function DocumentList({
                     )}
                     <td className={cn("p-2 text-right", strike)}>{formatRM(total)}</td>
                     {isInvoice && <td className="p-2 text-right">{paid ? formatRM(paid) : "—"}</td>}
-                    {isInvoice && <td className={cn("p-2 text-right", balance > 0 && !voided && "font-medium")}>{voided ? "—" : formatRM(balance)}</td>}
+                    {isInvoice && <td className={cn("p-2 text-right", balance > 0 && !closed && "font-medium")}>{closed ? "—" : formatRM(balance)}</td>}
                     <td className="p-2 text-right whitespace-nowrap">
-                      {isInvoice && !voided && st !== "paid" && (
+                      {isInvoice && !closed && st !== "paid" && (
                         <button
                           onClick={() => setPayFor({ id: inv.id, invoice_no: inv.invoice_no, total, balance })}
                           className="text-xs text-emerald-700 hover:underline mr-3"
@@ -326,7 +328,7 @@ export function DocumentList({
               <tfoot className="bg-neutral-50 border-t font-medium">
                 <tr>
                   <td className="p-2" colSpan={colCount - 4}>
-                    {rows.length} invoice{rows.length === 1 ? "" : "s"} <span className="font-normal text-neutral-400">(void excluded)</span>
+                    {rows.length} invoice{rows.length === 1 ? "" : "s"} <span className="font-normal text-neutral-400">(void and refunded excluded)</span>
                   </td>
                   <td className="p-2 text-right">{formatRM(sums.total)}</td>
                   <td className="p-2 text-right">{formatRM(sums.paid)}</td>
