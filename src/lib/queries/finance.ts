@@ -156,6 +156,7 @@ export async function fetchPaymentsForInvoices(invoiceIds: string[]): Promise<Re
 
 export type PaymentInput = {
   invoice_id: string;
+  kind?: "payment" | "refund";
   amount: number;
   paid_on: string;
   method: PaymentMethod;

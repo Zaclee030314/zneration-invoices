@@ -28,10 +28,11 @@ export function describeActivity(entry: ActivityEntry, members: Member[]): strin
     if (entry.action === "created") return `${actor} created project '${name}'`;
     if (entry.action === "stage_changed") return `${actor} moved project '${name}' to ${STAGE_LABEL[str(d.to) as ProjectStage] ?? str(d.to)}`;
   }
-  if (entry.entity_type === "payment" && entry.action === "payment_recorded") {
+  if (entry.entity_type === "payment" && (entry.action === "payment_recorded" || entry.action === "refund_recorded")) {
     const amt = Number(d.amount);
     const no = str(d.invoice_no);
-    return `${actor} recorded a payment${Number.isFinite(amt) ? ` of RM ${amt.toLocaleString("en-MY", { minimumFractionDigits: 2 })}` : ""}${no ? ` on ${no}` : ""}`;
+    const what = entry.action === "refund_recorded" ? "a refund" : "a payment";
+    return `${actor} recorded ${what}${Number.isFinite(amt) ? ` of RM ${amt.toLocaleString("en-MY", { minimumFractionDigits: 2 })}` : ""}${no ? ` on ${no}` : ""}`;
   }
   return `${actor} ${entry.action.replace(/_/g, " ")} ${entry.entity_type.replace(/_/g, " ")}`;
 }

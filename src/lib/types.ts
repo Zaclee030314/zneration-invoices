@@ -254,17 +254,21 @@ export interface ScheduleRow extends PaymentSchedule {
 }
 
 export type PaymentMethod = "bank_transfer" | "duitnow" | "cash" | "cheque" | "card" | "other";
+// A refund is money returned to the client; it reduces the invoice's paid total.
+export type PaymentKind = "payment" | "refund";
 
 export interface Payment {
   id: string;
   workspace_id: string;
   invoice_id: string;
+  kind: PaymentKind;
   amount: number;
   paid_on: string;
   method: PaymentMethod;
   reference: string | null;
   note: string | null;
   receipt_id: string | null;
+  slip_path: string | null;
   created_by: string | null;
   created_at: string;
 }

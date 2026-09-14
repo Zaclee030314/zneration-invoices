@@ -9,7 +9,7 @@ import { PaymentDialog } from "@/components/finance/PaymentDialog";
 import { PaymentsList } from "@/components/finance/PaymentsList";
 import { supabase } from "@/lib/supabase/client";
 import { downloadFromApi } from "@/lib/download";
-import { invoiceTotals, type InvoiceBalance, type InvoiceWithItems, type Payment, type Project } from "@/lib/types";
+import { invoiceTotals, type InvoiceBalance, type InvoiceWithItems, type Payment, type PaymentKind, type Project } from "@/lib/types";
 import { COMPANY, DOC_TITLE, DOC_NUMBER_LABEL, docBasePath, docFooter, formatRM } from "@/lib/company";
 import { duplicateDocument, unvoidDocument, voidDocument } from "@/lib/documents";
 import { fetchBalance, fetchPaymentsForInvoice } from "@/lib/queries/finance";
@@ -26,7 +26,7 @@ export function DocumentDetail({ id }: { id: string }) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [payOpen, setPayOpen] = useState(false);
+  const [payMode, setPayMode] = useState<PaymentKind | null>(null);
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from("invoices").select("*, invoice_items(*)").eq("id", id).maybeSingle();
@@ -125,8 +125,13 @@ export function DocumentDetail({ id }: { id: string }) {
         </div>
         <div className="flex gap-2 flex-wrap">
           {isInvoice && !isVoid && status !== "paid" && (
-            <button onClick={() => setPayOpen(true)} disabled={busy} className="border border-emerald-600 text-emerald-700 rounded px-3 py-1.5 text-sm disabled:opacity-50">
+            <button onClick={() => setPayMode("payment")} disabled={busy} className="border border-emerald-600 text-emerald-700 rounded px-3 py-1.5 text-sm disabled:opacity-50">
               Record payment
+            </button>
+          )}
+          {isInvoice && paidTotal > 0 && (
+            <button onClick={() => setPayMode("refund")} disabled={busy} className="border border-red-300 text-red-700 rounded px-3 py-1.5 text-sm disabled:opacity-50">
+              Record refund
             </button>
           )}
           {isInvoice && (
@@ -272,9 +277,10 @@ export function DocumentDetail({ id }: { id: string }) {
 
       {isInvoice && (
         <PaymentDialog
-          invoice={{ id: invoice.id, invoice_no: invoice.invoice_no, total, balance: remaining }}
-          open={payOpen}
-          onOpenChange={setPayOpen}
+          mode={payMode ?? "payment"}
+          invoice={{ id: invoice.id, invoice_no: invoice.invoice_no, total, balance: remaining, paid: paidTotal }}
+          open={payMode !== null}
+          onOpenChange={(o) => !o && setPayMode(null)}
           onSaved={load}
         />
       )}
