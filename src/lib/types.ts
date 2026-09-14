@@ -274,6 +274,152 @@ export interface Payment {
 }
 
 // ---------------------------------------------------------------------------
+// Expenses (imported bank statements)
+// ---------------------------------------------------------------------------
+export type { BankCode, TxnCategory } from "./bank/types";
+import type { BankCode, TxnCategory } from "./bank/types";
+
+export type ExpenseStatus = "done" | "needs_attention";
+export type ExpenseDoneReason = "documents" | "explanation" | "own_transfer" | "zero_amount";
+export type ExpenseDocKind = "invoice" | "receipt" | "agreement" | "other";
+export type CategorySource = "auto" | "history" | "user";
+
+export interface BankAccount {
+  id: string;
+  workspace_id: string;
+  bank: BankCode;
+  account_no: string;
+  account_name: string | null;
+  label: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StatementValidation {
+  checks?: { code: string; ok: boolean; message: string }[];
+  warnings?: string[];
+  segmentation?: string;
+}
+
+export interface BankStatement {
+  id: string;
+  workspace_id: string;
+  account_id: string;
+  period_start: string;
+  period_end: string;
+  file_path: string;
+  file_name: string;
+  file_sha256: string;
+  opening_balance: number;
+  closing_balance: number;
+  total_in: number;
+  total_out: number;
+  txn_count: number;
+  inserted_count: number;
+  duplicate_count: number;
+  parser_version: string | null;
+  validation: StatementValidation;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
+export interface BankTransaction {
+  id: string;
+  workspace_id: string;
+  account_id: string;
+  statement_id: string;
+  seq: number;
+  page: number | null;
+  posted_on: string;
+  txn_date: string;
+  txn_at: string | null;
+  direction: "in" | "out";
+  amount: number;
+  balance: number;
+  description: string;
+  desc_lines: string[];
+  txn_type: string | null;
+  reference: string | null;
+  counterparty: string | null;
+  counterparty_key: string | null;
+  fingerprint: string;
+  category: TxnCategory | null;
+  category_source: CategorySource | null;
+  project_id: string | null;
+  tag: string | null;
+  explanation: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Row shape of bank_transactions_view.
+export interface BankTransactionRow extends BankTransaction {
+  bank: BankCode;
+  account_no: string;
+  account_label: string;
+  project_code: string | null;
+  project_name: string | null;
+  project_kind: ProjectKind | null;
+  doc_count: number;
+  status: ExpenseStatus | null;
+  done_reason: ExpenseDoneReason | null;
+}
+
+export interface ExpenseDocument {
+  id: string;
+  workspace_id: string;
+  transaction_id: string;
+  kind: ExpenseDocKind;
+  file_path: string;
+  file_name: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  note: string | null;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
+export interface BankTag {
+  workspace_id: string;
+  tag: string;
+  use_count: number;
+  last_used_at: string;
+}
+
+// What /api/expenses/statements reports about an uploaded statement before import.
+export interface StatementPreview {
+  bank: BankCode;
+  accountNo: string;
+  accountName: string | null;
+  accountId: string | null;
+  accountLabel: string | null;
+  periodStart: string;
+  periodEnd: string;
+  openingBalance: number;
+  closingBalance: number;
+  totalIn: number;
+  totalOut: number;
+  txnCount: number;
+  moneyOutCount: number;
+  checks: { code: string; ok: boolean; message: string }[];
+  warnings: string[];
+  ok: boolean;
+  segmentation: string;
+  alreadyImported: { id: string; file_name: string; created_at: string } | null;
+  overlapping: { id: string; file_name: string; period_start: string; period_end: string }[];
+  newCount: number;
+  duplicateCount: number;
+}
+
+export interface StatementImportResult {
+  status: "imported" | "already_imported";
+  statement_id: string;
+  account_id: string;
+  inserted?: number;
+  duplicates?: number;
+}
+
+// ---------------------------------------------------------------------------
 // Time / content
 // ---------------------------------------------------------------------------
 export interface TimeEntry {

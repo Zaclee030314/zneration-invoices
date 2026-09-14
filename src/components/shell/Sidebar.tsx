@@ -2,7 +2,7 @@
 import Link from "next/link";
 import {
   LayoutDashboard, FolderKanban, Kanban, Users, CalendarDays, Timer,
-  FileText, Receipt, FileSignature, Settings,
+  FileText, Receipt, FileSignature, Settings, Wallet,
 } from "lucide-react";
 import { NavLink } from "./NavLink";
 import { UserMenu } from "./UserMenu";
@@ -29,6 +29,7 @@ const groups = [
       { href: "/receipts", label: "Receipts", icon: Receipt },
     ],
   },
+  { title: "Finance", items: [{ href: "/expenses", label: "Expenses", icon: Wallet }] },
   { title: "Settings", items: [{ href: "/settings/team", label: "Team", icon: Settings }] },
 ];
 

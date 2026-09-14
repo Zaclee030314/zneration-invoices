@@ -1,8 +1,8 @@
 // Display labels and colours for every enum in the schema. Import from here so
 // stages, statuses and channels look the same on every page.
 import type {
-  ClientStatus, ContentChannel, ContentFormat, ContentStatus, InvoiceStatus, MilestoneStatus,
-  PaymentMethod, Priority, ProjectHealth, ProjectKind, ProjectStage, TaskStatus,
+  ClientStatus, ContentChannel, ContentFormat, ContentStatus, ExpenseDocKind, ExpenseStatus, InvoiceStatus,
+  MilestoneStatus, PaymentMethod, Priority, ProjectHealth, ProjectKind, ProjectStage, TaskStatus, TxnCategory,
 } from "./types";
 
 export const PROJECT_STAGES: { value: ProjectStage; label: string; color: string }[] = [
@@ -96,7 +96,47 @@ export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
 ];
 export const PAYMENT_METHOD_LABEL = Object.fromEntries(PAYMENT_METHODS.map((m) => [m.value, m.label])) as Record<PaymentMethod, string>;
 
-export const CONTENT_CHANNELS: { value: ContentChannel; label: string; color: string }[] = [
+// Categories for bank transactions. "in" categories are for money received.
+export const EXPENSE_CATEGORIES: { value: TxnCategory; label: string; color: string; direction: "out" | "in" }[] = [
+  { value: "advertising", label: "Advertising & ads", color: "bg-blue-100 text-blue-800", direction: "out" },
+  { value: "event_costs", label: "Event costs", color: "bg-amber-100 text-amber-800", direction: "out" },
+  { value: "contractors", label: "Contractors & freelancers", color: "bg-violet-100 text-violet-800", direction: "out" },
+  { value: "salary", label: "Salary & wages", color: "bg-emerald-100 text-emerald-800", direction: "out" },
+  { value: "staff_claim", label: "Staff claims", color: "bg-teal-100 text-teal-800", direction: "out" },
+  { value: "rental", label: "Rental", color: "bg-orange-100 text-orange-800", direction: "out" },
+  { value: "software", label: "Software & internet", color: "bg-sky-100 text-sky-800", direction: "out" },
+  { value: "purchases", label: "Purchases & supplies", color: "bg-lime-100 text-lime-800", direction: "out" },
+  { value: "transport", label: "Transport & delivery", color: "bg-cyan-100 text-cyan-800", direction: "out" },
+  { value: "meals", label: "Meals", color: "bg-rose-100 text-rose-800", direction: "out" },
+  { value: "professional_fees", label: "Professional fees", color: "bg-indigo-100 text-indigo-800", direction: "out" },
+  { value: "tax_statutory", label: "Tax, EPF, SOCSO & licences", color: "bg-red-100 text-red-800", direction: "out" },
+  { value: "bank_charges", label: "Bank charges", color: "bg-stone-100 text-stone-700", direction: "out" },
+  { value: "refund", label: "Refunds & deposit returns", color: "bg-pink-100 text-pink-800", direction: "out" },
+  { value: "loan_advance", label: "Loans & advances", color: "bg-yellow-100 text-yellow-800", direction: "out" },
+  { value: "own_transfer", label: "Own account transfer", color: "bg-neutral-200 text-neutral-600", direction: "out" },
+  { value: "other", label: "Other", color: "bg-neutral-100 text-neutral-700", direction: "out" },
+  { value: "customer_payment", label: "Customer payment", color: "bg-emerald-100 text-emerald-800", direction: "in" },
+  { value: "other_income", label: "Other income", color: "bg-neutral-100 text-neutral-700", direction: "in" },
+];
+export const EXPENSE_CATEGORY_LABEL = Object.fromEntries(EXPENSE_CATEGORIES.map((c) => [c.value, c.label])) as Record<TxnCategory, string>;
+export const EXPENSE_CATEGORY_COLOR = Object.fromEntries(EXPENSE_CATEGORIES.map((c) => [c.value, c.color])) as Record<TxnCategory, string>;
+
+export const EXPENSE_STATUSES: { value: ExpenseStatus; label: string; color: string }[] = [
+  { value: "needs_attention", label: "Needs receipt", color: "bg-amber-100 text-amber-800" },
+  { value: "done", label: "Done", color: "bg-emerald-100 text-emerald-800" },
+];
+export const EXPENSE_STATUS_LABEL = Object.fromEntries(EXPENSE_STATUSES.map((s) => [s.value, s.label])) as Record<ExpenseStatus, string>;
+export const EXPENSE_STATUS_COLOR = Object.fromEntries(EXPENSE_STATUSES.map((s) => [s.value, s.color])) as Record<ExpenseStatus, string>;
+
+export const EXPENSE_DOC_KINDS: { value: ExpenseDocKind; label: string }[] = [
+  { value: "invoice", label: "Invoice" },
+  { value: "receipt", label: "Receipt" },
+  { value: "agreement", label: "Agreement" },
+  { value: "other", label: "Other" },
+];
+export const EXPENSE_DOC_KIND_LABEL = Object.fromEntries(EXPENSE_DOC_KINDS.map((k) => [k.value, k.label])) as Record<ExpenseDocKind, string>;
+
+export const CONTENT_CHANNELS:{ value: ContentChannel; label: string; color: string }[] = [
   { value: "instagram", label: "Instagram", color: "bg-pink-100 text-pink-800 border-pink-200" },
   { value: "facebook", label: "Facebook", color: "bg-blue-100 text-blue-800 border-blue-200" },
   { value: "tiktok", label: "TikTok", color: "bg-neutral-900 text-white border-neutral-900" },

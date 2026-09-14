@@ -2,3 +2,5 @@ node_modules
 .next
 .env.local
 *.tsbuildinfo
+/scripts/local/
+bank_txns*.json
