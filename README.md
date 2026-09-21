@@ -127,3 +127,9 @@ Open http://localhost:3000 and sign in. Invite teammates from **Settings → Tea
 3. Add the Vercel domain to Supabase Auth redirect URLs.
 
 PDF and ZIP routes declare `runtime = "nodejs"` and a 60 s `maxDuration`.
+
+## WhatsApp workshop payment integration
+
+`POST /api/integrations/workshop-payment` accepts authenticated payment events from the WhatsApp workshop assistant. It creates the ZMIV invoice, DuitNow payment record and matching ZMRC receipt in one database transaction. Repeating the same `externalId` returns the existing records instead of creating duplicates.
+
+Apply migration `20260921091115_workshop_payment_automation.sql`, then configure `SUPABASE_SERVICE_ROLE_KEY`, `WHATSAPP_INTEGRATION_SECRET`, and `WHATSAPP_WORKSPACE_ID` in Vercel. The integration secret must be identical in the invoice app and WhatsApp bot and must never use a `NEXT_PUBLIC_` prefix.

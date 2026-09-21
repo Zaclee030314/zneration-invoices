@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:integration": "tsx --test src/lib/workshop-integration.test.ts",
     "verify:bank": "tsx scripts/verify-bank-parsers.ts"
   },
   "engines": {
