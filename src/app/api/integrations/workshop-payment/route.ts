@@ -4,9 +4,47 @@ import { parseWorkshopPayment, validSecret } from "@/lib/workshop-integration";
 
 export const runtime = "nodejs";
 
+function authorize(req: Request) {
+  return validSecret(
+    req.headers.get("authorization"),
+    process.env.WHATSAPP_INTEGRATION_SECRET ?? "",
+  );
+}
+
+export async function GET(req: Request) {
+  if (!authorize(req)) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const workspaceId = process.env.WHATSAPP_WORKSPACE_ID;
+  if (!workspaceId) {
+    return NextResponse.json({ error: "Workshop integration is not configured." }, { status: 503 });
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin()
+      .from("workspaces")
+      .select("id")
+      .eq("id", workspaceId)
+      .maybeSingle();
+
+    if (error || !data) {
+      console.error("Workshop integration health check failed", {
+        code: error?.code,
+        message: error?.message,
+      });
+      return NextResponse.json({ ok: false }, { status: 503 });
+    }
+
+    return NextResponse.json({ ok: true }, { status: 200 });
+  } catch (error) {
+    console.error("Workshop integration health check failed", error);
+    return NextResponse.json({ ok: false }, { status: 503 });
+  }
+}
+
 export async function POST(req: Request) {
-  const secret = process.env.WHATSAPP_INTEGRATION_SECRET ?? "";
-  if (!validSecret(req.headers.get("authorization"), secret)) {
+  if (!authorize(req)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
