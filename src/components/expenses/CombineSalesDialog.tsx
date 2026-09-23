@@ -42,7 +42,7 @@ export function CombineSalesDialog({
   const first = sorted[0]?.txn_date ?? "";
   const last = sorted[sorted.length - 1]?.txn_date ?? "";
   const totalCents = sorted.reduce((s, c) => s + cents(c.amount), 0);
-  const commonTag = sorted.every((c) => c.tag && c.tag === sorted[0].tag) ? sorted[0].tag : null;
+  const commonTag = sorted.length > 0 && sorted.every((c) => c.tag && c.tag === sorted[0].tag) ? sorted[0].tag : null;
   const problem = !sorted.length
     ? "Select the payments to combine."
     : sorted.some((c) => cents(c.linked_total) > 0)
