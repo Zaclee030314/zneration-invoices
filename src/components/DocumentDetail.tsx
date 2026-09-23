@@ -10,7 +10,8 @@ import { PaymentsList } from "@/components/finance/PaymentsList";
 import { supabase } from "@/lib/supabase/client";
 import { downloadFromApi } from "@/lib/download";
 import { invoiceTotals, type InvoiceBalance, type InvoiceWithItems, type Payment, type PaymentKind, type Project } from "@/lib/types";
-import { COMPANY, DOC_TITLE, DOC_NUMBER_LABEL, docBasePath, docFooter, formatRM } from "@/lib/company";
+import { DOC_TITLE, DOC_NUMBER_LABEL, docBasePath, docFooter, formatRM } from "@/lib/company";
+import { useWorkspace } from "@/lib/workspace";
 import { duplicateDocument, unvoidDocument, voidDocument } from "@/lib/documents";
 import { fetchBalance, fetchPaymentsForInvoice } from "@/lib/queries/finance";
 import { formatDate } from "@/lib/labels";
@@ -21,6 +22,8 @@ type ProjectRef = Pick<Project, "id" | "code" | "name">;
 
 export function DocumentDetail({ id }: { id: string }) {
   const router = useRouter();
+  const { company } = useWorkspace();
+  const letterhead = company.company;
   const [invoice, setInvoice] = useState<InvoiceWithItems | null>(null);
   const [project, setProject] = useState<ProjectRef | null>(null);
   const [balance, setBalance] = useState<InvoiceBalance | null>(null);
@@ -59,7 +62,7 @@ export function DocumentDetail({ id }: { id: string }) {
   async function generateReceipt() {
     if (!invoice || busy) return;
     setBusy(true);
-    const res = await duplicateDocument(invoice, { docType: "receipt", date: invoice.invoice_date });
+    const res = await duplicateDocument(invoice, { docType: "receipt", date: invoice.invoice_date, series: company.series });
     setBusy(false);
     if ("error" in res) return toast.error(res.error);
     router.push(`/receipts/${res.id}`);
@@ -71,7 +74,7 @@ export function DocumentDetail({ id }: { id: string }) {
     if (!invoice || busy) return;
     setBusy(true);
     const today = new Date().toISOString().slice(0, 10);
-    const res = await duplicateDocument(invoice, { docType: "invoice", date: today });
+    const res = await duplicateDocument(invoice, { docType: "invoice", date: today, series: company.series });
     setBusy(false);
     if ("error" in res) return toast.error(res.error);
     router.push(`/invoices/${res.id}/edit`);
@@ -83,7 +86,7 @@ export function DocumentDetail({ id }: { id: string }) {
     if (!invoice || busy) return;
     setBusy(true);
     const today = new Date().toISOString().slice(0, 10);
-    const res = await duplicateDocument(invoice, { docType: invoice.doc_type, date: today });
+    const res = await duplicateDocument(invoice, { docType: invoice.doc_type, date: today, series: company.series });
     setBusy(false);
     if ("error" in res) return toast.error(res.error);
     router.push(`${docBasePath(invoice.doc_type)}/${res.id}/edit`);
@@ -114,6 +117,7 @@ export function DocumentDetail({ id }: { id: string }) {
   const paidTotal = Number(balance?.paid_total ?? 0);
   const remaining = balance ? Number(balance.balance) : total - paidTotal;
   const status = balance?.status ?? null;
+  const footer = docFooter(invoice.doc_type, letterhead);
 
   return (
     <>
@@ -199,8 +203,8 @@ export function DocumentDetail({ id }: { id: string }) {
         )}
         <div className="flex justify-between items-start">
           <div>
-            <h2 className="text-xl font-semibold">{COMPANY.name}</h2>
-            <p className="text-xs text-neutral-500">{COMPANY.regNo}</p>
+            <h2 className="text-xl font-semibold">{letterhead.name}</h2>
+            <p className="text-xs text-neutral-500">{letterhead.regNo}</p>
           </div>
           <h2 className="text-2xl font-bold text-[#1f4e79]">{DOC_TITLE[invoice.doc_type]}</h2>
         </div>
@@ -267,12 +271,12 @@ export function DocumentDetail({ id }: { id: string }) {
         </div>
 
         <div className="text-center text-xs text-neutral-600 mt-8 space-y-1">
-          <p>{docFooter(invoice.doc_type).line1}</p>
-          <p className="font-semibold text-sm text-black">{docFooter(invoice.doc_type).thanks}</p>
-          <p>{docFooter(invoice.doc_type).enquiry}</p>
+          <p>{footer.line1}</p>
+          <p className="font-semibold text-sm text-black">{footer.thanks}</p>
+          <p>{footer.enquiry}</p>
           <hr className="my-2" />
-          <p>{COMPANY.address}</p>
-          <p>Tel: {COMPANY.tel} Fax: - E-mail: {COMPANY.email} Web: -</p>
+          <p>{letterhead.address}</p>
+          <p>Tel: {letterhead.tel || "-"} Fax: - E-mail: {letterhead.email || "-"} Web: -</p>
         </div>
       </div>
 

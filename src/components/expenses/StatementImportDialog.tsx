@@ -28,7 +28,8 @@ interface Item {
 const BUSY: Stage[] = ["uploading", "checking", "importing"];
 
 function canImport(it: Item): boolean {
-  return it.stage === "ready" && !!it.preview?.ok && !it.preview.alreadyImported && it.preview.newCount > 0;
+  // A month with no transactions is still imported, so it shows as covered.
+  return it.stage === "ready" && !!it.preview?.ok && !it.preview.alreadyImported && (it.preview.newCount > 0 || it.preview.txnCount === 0);
 }
 
 // Upload one or more statement PDFs; each is checked on the server and shown
@@ -268,7 +269,7 @@ function ItemCard({ item, onImport, onDiscard }: { item: Item; onImport: () => v
             <p className="text-xs text-neutral-600">
               {pv.newCount} new transaction{pv.newCount === 1 ? "" : "s"}
               {pv.duplicateCount ? `, ${pv.duplicateCount} already imported from another statement` : ""}.
-              {pv.newCount === 0 && " Nothing to import."}
+              {pv.newCount === 0 && (pv.txnCount === 0 ? " No transactions this month; importing records the month as covered." : " Nothing to import.")}
             </p>
           ) : (
             <p className="text-xs text-red-700">This statement cannot be imported until it passes every check. Try exporting it again from the bank.</p>

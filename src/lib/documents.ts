@@ -1,5 +1,5 @@
 import { supabase } from "./supabase/client";
-import { currentYymm, formatRM, seriesPrefix } from "./company";
+import { currentYymm, formatRM, seriesPrefix, type InvoiceSeries } from "./company";
 import { defaultDueDate } from "./finance";
 import { fetchScheduleRow } from "./queries/finance";
 import type { Client, DocType, InvoiceWithItems, ProjectWithClient } from "./types";
@@ -10,9 +10,9 @@ import type { Client, DocType, InvoiceWithItems, ProjectWithClient } from "./typ
 // (type -> receipt). Returns the new document id, or an error message.
 export async function duplicateDocument(
   source: InvoiceWithItems,
-  opts: { docType: DocType; date: string; projectId?: string | null }
+  opts: { docType: DocType; date: string; series: InvoiceSeries[]; projectId?: string | null }
 ): Promise<{ id: string } | { error: string }> {
-  const series = seriesPrefix(opts.docType, source.category);
+  const series = seriesPrefix(opts.docType, source.category, opts.series);
   const yymm = currentYymm(new Date(opts.date));
   const { data: newNo, error: rpcErr } = await supabase.rpc("next_invoice_no", { p_category: series, p_yymm: yymm });
   if (rpcErr || !newNo) return { error: rpcErr?.message ?? "Could not reserve a document number." };

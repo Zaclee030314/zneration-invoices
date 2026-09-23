@@ -2,6 +2,8 @@ import JSZip from "jszip";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { supabaseForRequest } from "@/lib/supabase/server";
 import { InvoicePdfDocument } from "@/lib/InvoicePdfDocument";
+import { companyProfileFor } from "@/lib/supabase/active-workspace";
+import type { CompanyDetails } from "@/lib/company";
 
 // react-pdf needs the Node runtime; PDF/ZIP generation can take a few seconds.
 export const runtime = "nodejs";
@@ -23,11 +25,13 @@ export async function POST(req: Request) {
     return new Response(error?.message ?? "Invoices not found", { status: 404 });
   }
 
+  const profiles = new Map<string, CompanyDetails>();
   const zip = new JSZip();
   for (const invoice of invoices) {
     const { invoice_items, ...invoiceFields } = invoice;
+    if (!profiles.has(invoice.workspace_id)) profiles.set(invoice.workspace_id, (await companyProfileFor(supabase, invoice.workspace_id)).company);
     const buffer = await renderToBuffer(
-      <InvoicePdfDocument invoice={invoiceFields} items={invoice_items} />
+      <InvoicePdfDocument invoice={invoiceFields} items={invoice_items} company={profiles.get(invoice.workspace_id) as CompanyDetails} />
     );
     const safeName = invoice.bill_to_name.replace(/[\\/:*?"<>|]/g, "-");
     zip.file(`${invoice.invoice_no} - ${safeName}.pdf`, buffer);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseForRequest } from "@/lib/supabase/server";
+import { activeWorkspaceId } from "@/lib/supabase/active-workspace";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -20,14 +21,7 @@ export async function POST(req: Request) {
   } = await db.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
-  const { data: membership } = await db
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .order("created_at")
-    .limit(1)
-    .maybeSingle();
-  const workspaceId = membership?.workspace_id as string | undefined;
+  const workspaceId = await activeWorkspaceId(db, user.id);
   if (!workspaceId) return NextResponse.json({ error: "No workspace." }, { status: 403 });
 
   const { data: isAdmin } = await db.rpc("is_workspace_admin", { ws: workspaceId });

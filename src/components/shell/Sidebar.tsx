@@ -2,9 +2,10 @@
 import Link from "next/link";
 import {
   LayoutDashboard, FolderKanban, Kanban, Users, CalendarDays, Timer,
-  FileText, Receipt, FileSignature, Settings, Wallet,
+  FileText, Receipt, FileSignature, Settings, Wallet, Building2,
 } from "lucide-react";
 import { NavLink } from "./NavLink";
+import { CompanySwitcher } from "./CompanySwitcher";
 import { UserMenu } from "./UserMenu";
 import { TimerWidget } from "@/components/time/TimerWidget";
 import { useWorkspace } from "@/lib/workspace";
@@ -30,18 +31,28 @@ const groups = [
     ],
   },
   { title: "Finance", items: [{ href: "/expenses", label: "Expenses", icon: Wallet }] },
-  { title: "Settings", items: [{ href: "/settings/team", label: "Team", icon: Settings }] },
+  {
+    title: "Settings",
+    items: [
+      { href: "/settings/company", label: "Company", icon: Building2 },
+      { href: "/settings/team", label: "Team", icon: Settings },
+    ],
+  },
 ];
 
 export function Sidebar() {
-  const { workspace } = useWorkspace();
+  const { workspace, companies, isAdmin } = useWorkspace();
   return (
     <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col border-r bg-neutral-100/80">
       <div className="px-4 py-4 border-b">
         <Link href="/dashboard" className="block font-semibold text-neutral-900 leading-tight">
           Zneration Hub
         </Link>
-        <p className="text-xs text-neutral-500 truncate">{workspace?.name ?? "Workspace"}</p>
+        {companies.length > 1 || isAdmin ? (
+          <CompanySwitcher />
+        ) : (
+          <p className="text-xs text-neutral-500 truncate">{workspace?.name ?? "Workspace"}</p>
+        )}
       </div>
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
         {groups.map((g, i) => (

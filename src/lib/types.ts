@@ -1,4 +1,5 @@
-export type InvoiceCategory = "EVIV" | "ZMIV";
+// The invoice number series a document belongs to (e.g. EVIV); each company lists its own.
+export type InvoiceCategory = string;
 export type DocType = "invoice" | "receipt" | "quotation";
 export type WorkspaceRole = "admin" | "member";
 

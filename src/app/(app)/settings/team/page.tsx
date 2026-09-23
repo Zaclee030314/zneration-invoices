@@ -17,7 +17,7 @@ interface Invite {
 }
 
 export default function TeamPage() {
-  const { workspaceId, members, isAdmin, userId, refreshMembers } = useWorkspace();
+  const { workspaceId, workspace, members, isAdmin, userId, refreshMembers } = useWorkspace();
   const [invites, setInvites] = useState<Invite[]>([]);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<WorkspaceRole>("member");
@@ -32,6 +32,7 @@ export default function TeamPage() {
     const { data } = await supabase
       .from("workspace_invites")
       .select("id, email, role, created_at")
+      .eq("workspace_id", workspaceId)
       .is("accepted_at", null)
       .order("created_at", { ascending: false });
     setInvites((data as Invite[]) ?? []);
@@ -78,7 +79,7 @@ export default function TeamPage() {
     <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-semibold">Team</h1>
-        <p className="text-sm text-neutral-500">Everyone here shares the same clients, projects, documents and time entries.</p>
+        <p className="text-sm text-neutral-500">Everyone here shares {workspace?.name ?? "this company"}'s clients, projects, documents, expenses and time entries.</p>
       </div>
 
       <section className="bg-white border rounded">

@@ -1,5 +1,6 @@
 import { loadPdfLayout, type PdfLayout } from "./pdf";
 import { looksLikePbb, parsePbb } from "./pbb";
+import { looksLikePbbMonthly, parsePbbMonthly } from "./pbb-monthly";
 import { looksLikeUob, parseUob } from "./uob";
 import { StatementFormatError } from "./common";
 import { describePbb, describeUob } from "./counterparty";
@@ -16,12 +17,14 @@ export interface ParseOptions {
 }
 
 export function parseStatementLayout(layout: PdfLayout, opts: ParseOptions = {}): ParsedStatement {
+  // The monthly statement reader fills in payee and reference itself.
+  if (looksLikePbbMonthly(layout.text)) return parsePbbMonthly(layout);
   let statement: ParsedStatement;
   if (looksLikePbb(layout.text)) statement = parsePbb(layout);
   else if (looksLikeUob(layout.text)) statement = parseUob(layout, opts);
   else {
     throw new StatementFormatError(
-      "This PDF is not a supported bank statement. Upload the UOB Account Activities export or the Public Bank account statement."
+      "This PDF is not a supported bank statement. Upload the UOB Account Activities export, the Public Bank account activity print or the Public Bank monthly statement."
     );
   }
   for (const t of statement.transactions) {

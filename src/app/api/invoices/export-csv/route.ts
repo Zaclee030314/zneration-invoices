@@ -1,5 +1,6 @@
 import { supabaseForRequest } from "@/lib/supabase/server";
 import { invoiceTotals } from "@/lib/types";
+import { SERIES_KEY_RE } from "@/lib/company";
 
 function csvEscape(value: string): string {
   if (/[",\n]/.test(value)) {
@@ -19,7 +20,7 @@ export async function GET(req: Request) {
 
   let query = supabase.from("invoices").select("*, invoice_items(*)");
   if (docType === "invoice" || docType === "receipt" || docType === "quotation") query = query.eq("doc_type", docType);
-  if (category === "EVIV" || category === "ZMIV") query = query.eq("category", category);
+  if (category && SERIES_KEY_RE.test(category)) query = query.eq("category", category);
   if (from) query = query.gte("invoice_date", from);
   if (to) query = query.lte("invoice_date", to);
   if (search) query = query.or(`invoice_no.ilike.%${search}%,bill_to_name.ilike.%${search}%`);

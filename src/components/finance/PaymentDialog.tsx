@@ -9,6 +9,7 @@ import { createPayment, updatePayment } from "@/lib/queries/finance";
 import { ATTACHMENT_ACCEPT, attachmentProblem, uploadPaymentSlip } from "@/lib/attachments";
 import { PAYMENT_METHODS, todayIso } from "@/lib/labels";
 import { formatRM } from "@/lib/company";
+import { useWorkspace } from "@/lib/workspace";
 import type { InvoiceWithItems, PaymentKind, PaymentMethod } from "@/lib/types";
 
 export type PaymentDialogInvoice = {
@@ -37,6 +38,7 @@ export function PaymentDialog({
   mode?: PaymentKind;
 }) {
   const isRefund = mode === "refund";
+  const { company } = useWorkspace();
   const [amount, setAmount] = useState("");
   const [paidOn, setPaidOn] = useState(todayIso());
   const [method, setMethod] = useState<PaymentMethod>("bank_transfer");
@@ -126,7 +128,7 @@ export function PaymentDialog({
     if (!isRefund && generateReceipt) {
       const { data: full } = await supabase.from("invoices").select("*, invoice_items(*)").eq("id", invoice.id).maybeSingle();
       if (full) {
-        const res = await duplicateDocument(full as InvoiceWithItems, { docType: "receipt", date: paidOn });
+        const res = await duplicateDocument(full as InvoiceWithItems, { docType: "receipt", date: paidOn, series: company.series });
         if ("error" in res) extraMsg = ` Receipt failed: ${res.error}`;
         else {
           const linked = await updatePayment(created.data.id, { receipt_id: res.id });

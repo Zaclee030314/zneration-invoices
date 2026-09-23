@@ -51,21 +51,32 @@ async function main() {
   }
   const baseline: BaselineTxn[] | null = baselinePath ? JSON.parse(await readFile(baselinePath, "utf8")) : null;
 
-  const files: { bank: string; stmt: string; file: string }[] = [];
+  // Either "<BANK> <year>" sub-folders (bank checked against detection) or PDFs directly in the folder.
+  const files: { bank: string | null; stmt: string; file: string }[] = [];
   for (const entry of await readdir(pdfDir, { withFileTypes: true })) {
+    if (entry.isFile() && entry.name.toLowerCase().endsWith(".pdf")) {
+      files.push({ bank: null, stmt: path.parse(entry.name).name, file: path.join(pdfDir, entry.name) });
+    }
     if (!entry.isDirectory()) continue;
     const bank = entry.name.split(/\s+/)[0].toUpperCase();
     for (const name of await readdir(path.join(pdfDir, entry.name))) {
       if (name.toLowerCase().endsWith(".pdf")) files.push({ bank, stmt: path.parse(name).name, file: path.join(pdfDir, entry.name, name) });
     }
   }
-  const monthIndex = (stmt: string) => MONTHS.indexOf(stmt.slice(0, 3).toLowerCase());
-  files.sort((a, b) => a.bank.localeCompare(b.bank) || monthIndex(a.stmt) - monthIndex(b.stmt));
+  const sortKey = (stmt: string) => {
+    const m = stmt.match(/(\d{4})[^A-Za-z0-9]+([A-Za-z]{3})[A-Za-z]*$/);
+    return m ? Number(m[1]) * 100 + MONTHS.indexOf(m[2].toLowerCase()) : MONTHS.indexOf(stmt.slice(0, 3).toLowerCase());
+  };
+  files.sort((a, b) => (a.bank ?? "").localeCompare(b.bank ?? "") || sortKey(a.stmt) - sortKey(b.stmt));
+  if (!files.length) {
+    console.error(`No PDF statements found in ${pdfDir}`);
+    process.exit(1);
+  }
 
   let failures = 0;
   const all: ParsedStatement[] = [];
   for (const f of files) {
-    const label = `${f.bank} ${f.stmt}`.padEnd(14);
+    const label = (f.bank ? `${f.bank} ${f.stmt}` : f.stmt).padEnd(14);
     let st: ParsedStatement;
     try {
       st = parseStatementLayout(await loadPdfLayout(new Uint8Array(await readFile(f.file))), { forceFallback });
@@ -76,7 +87,7 @@ async function main() {
     }
     all.push(st);
     const problems = st.checks.filter((c) => !c.ok).map((c) => `${c.code}: ${c.message}`);
-    if (st.bank !== f.bank) problems.push(`detected as ${st.bank}`);
+    if (f.bank && st.bank !== f.bank) problems.push(`detected as ${st.bank}`);
     if (baseline) problems.push(...compare(st, baseline.filter((b) => b.bank === f.bank && b.stmt === f.stmt)));
     if (problems.length) failures++;
     console.log(

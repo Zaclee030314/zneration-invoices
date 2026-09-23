@@ -15,6 +15,7 @@ import { isClosedInvoiceStatus } from "@/lib/finance";
 import { invoiceTotals, type DocType, type InvoiceBalance, type InvoiceCategory, type InvoiceStatus, type InvoiceWithItems } from "@/lib/types";
 import { INVOICE_STATUSES, formatDate } from "@/lib/labels";
 import { docBasePath, formatRM } from "@/lib/company";
+import { useWorkspace } from "@/lib/workspace";
 import { cn } from "@/lib/utils";
 
 type SortField = "invoice_date" | "invoice_no" | "bill_to_name" | "total" | "due_date" | "balance";
@@ -56,6 +57,11 @@ export function DocumentList({
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [payFor, setPayFor] = useState<PaymentDialogInvoice | null>(null);
   const router = useRouter();
+  const { company } = useWorkspace();
+  const seriesKeys = useMemo(
+    () => [...new Set([...company.series.map((s) => s.key), ...rowsRaw.map((r) => r.category)])],
+    [company.series, rowsRaw]
+  );
 
   useEffect(() => {
     load();
@@ -158,7 +164,7 @@ export function DocumentList({
     if (dupId) return;
     setDupId(inv.id);
     const today = new Date().toISOString().slice(0, 10);
-    const res = await duplicateDocument(inv, { docType: inv.doc_type, date: today });
+    const res = await duplicateDocument(inv, { docType: inv.doc_type, date: today, series: company.series });
     if ("error" in res) {
       setDupId(null);
       toast.error(res.error);
@@ -178,7 +184,7 @@ export function DocumentList({
     const errors: string[] = [];
     for (let i = 0; i < docs.length; i++) {
       const inv = docs[i];
-      const res = await duplicateDocument(inv, { docType: inv.doc_type, date: dateInMonth(inv.invoice_date, bulkMonth) });
+      const res = await duplicateDocument(inv, { docType: inv.doc_type, date: dateInMonth(inv.invoice_date, bulkMonth), series: company.series });
       if ("error" in res) errors.push(`${inv.invoice_no}: ${res.error}`);
       setBulkProgress({ done: i + 1, total: docs.length });
     }
@@ -221,7 +227,7 @@ export function DocumentList({
 
       <div className="flex flex-wrap gap-2 items-center bg-white border rounded p-3">
         <div className="flex gap-1">
-          {(["ALL", "EVIV", "ZMIV"] as const).map((c) => (
+          {["ALL", ...seriesKeys].map((c) => (
             <button
               key={c}
               onClick={() => setCategory(c)}

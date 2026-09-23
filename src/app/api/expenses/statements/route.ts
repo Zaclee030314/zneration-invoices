@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { supabaseForRequest } from "@/lib/supabase/server";
+import { activeWorkspaceId, companyProfileFor } from "@/lib/supabase/active-workspace";
+import { compact } from "@/lib/bank/money";
 import { ATTACHMENTS_BUCKET } from "@/lib/attachment-rules";
 import { parseStatementPdf, StatementFormatError, toImportRows, type ParsedStatement } from "@/lib/bank";
 import { centsToDecimal } from "@/lib/bank/money";
@@ -20,6 +22,17 @@ function friendly(message: string): string {
     /(does not exist|could not find|schema cache)/i.test(message)
     ? MISSING_TABLES
     : message;
+}
+
+// "ZNERATION MEDIA M SDN BHD" belongs to "Zneration Media M Sdn Bhd" or "Zneration Media":
+// compared on the leading word of each name.
+function holderMatches(holder: string, names: string[]): boolean {
+  const lead = (s: string) => compact(s.trim().split(/\s+/)[0] ?? "");
+  const h = lead(holder);
+  return h.length < 3 || names.some((n) => {
+    const c = lead(n);
+    return c.length >= 3 && (h.startsWith(c) || c.startsWith(h));
+  });
 }
 
 async function existingFingerprints(db: Db, accountId: string, from: string, to: string): Promise<Set<string>> {
@@ -52,14 +65,7 @@ export async function POST(req: Request) {
   } = await db.auth.getUser(token || undefined);
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
-  const { data: membership } = await db
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .order("created_at")
-    .limit(1)
-    .maybeSingle();
-  const workspaceId = membership?.workspace_id as string | undefined;
+  const workspaceId = await activeWorkspaceId(db, user.id);
   if (!workspaceId) return NextResponse.json({ error: "No workspace." }, { status: 403 });
 
   const body = (await req.json().catch(() => ({}))) as { mode?: string; statementId?: string; path?: string; fileName?: string };
@@ -91,6 +97,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 422 });
   }
   const rows = toImportRows(statement);
+
+  // Statements are refused in the wrong company so one company's bank lines never land in another's books.
+  const workspaceName = (await db.from("workspaces").select("name").eq("id", workspaceId).maybeSingle()).data?.name as string | undefined;
+  const { company } = await companyProfileFor(db, workspaceId);
+  if (statement.accountName && !holderMatches(statement.accountName, [company.name, workspaceName ?? ""])) {
+    statement.checks.push({
+      code: "account_holder",
+      ok: false,
+      message: `This statement is for ${statement.accountName}, but you are working in ${company.name || workspaceName}. Switch company first.`,
+    });
+    statement.ok = false;
+  }
 
   const { data: account, error: accountError } = await db
     .from("bank_accounts")

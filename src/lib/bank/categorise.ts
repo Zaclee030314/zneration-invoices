@@ -9,7 +9,7 @@ import type { BankCode, ParsedTxn, TxnCategory } from "./types";
 type Token = string | RegExp;
 
 const RULES: { category: TxnCategory; tokens: Token[] }[] = [
-  { category: "bank_charges", tokens: [/^(SC|SST DR)-/, "SERVICE CHARGE", "BANK CHARGE", "STAMP DUTY", "ANNUAL FEE"] },
+  { category: "bank_charges", tokens: [/^(SC|SST DR)(-|\s|$)/, "SERVICE CHARGE", "BANK CHARGE", "STAMP DUTY", "ANNUAL FEE"] },
   {
     category: "refund",
     // Public Bank cuts letters out of long references: "Deposit Rend", "Depositfund", "DeposRefund".

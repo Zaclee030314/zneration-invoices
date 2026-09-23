@@ -1,5 +1,5 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
-import { COMPANY, DOC_TITLE, DOC_NUMBER_LABEL, docFooter, formatRM } from "./company";
+import { DOC_TITLE, DOC_NUMBER_LABEL, docFooter, formatRM, type CompanyDetails } from "./company";
 import { invoiceTotals, type InvoiceItem, type Invoice } from "./types";
 
 const BLUE = "#1f4e79";
@@ -38,7 +38,8 @@ const styles = StyleSheet.create({
   hr: { borderBottomWidth: 1, borderColor: "#333", marginTop: 8, marginBottom: 6 },
 });
 
-export function InvoicePdfDocument({ invoice, items }: { invoice: Invoice; items: InvoiceItem[] }) {
+export function InvoicePdfDocument({ invoice, items, company }: { invoice: Invoice; items: InvoiceItem[]; company: CompanyDetails }) {
+  const footer = docFooter(invoice.doc_type, company);
   const { subtotal, salesTax, total } = invoiceTotals(invoice, items);
   const sorted = [...items].sort((a, b) => a.sort_order - b.sort_order);
   const dateStr = new Date(invoice.invoice_date).toLocaleDateString("en-MY", {
@@ -52,8 +53,8 @@ export function InvoicePdfDocument({ invoice, items }: { invoice: Invoice; items
       <Page size="A4" style={styles.page}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.companyName}>{COMPANY.name}</Text>
-            <Text style={styles.companyReg}>{COMPANY.regNo}</Text>
+            <Text style={styles.companyName}>{company.name}</Text>
+            <Text style={styles.companyReg}>{company.regNo}</Text>
           </View>
           <Text style={styles.invoiceTitle}>{DOC_TITLE[invoice.doc_type]}</Text>
         </View>
@@ -125,13 +126,13 @@ export function InvoicePdfDocument({ invoice, items }: { invoice: Invoice; items
         </View>
 
         <View style={styles.footer}>
-          <Text>{docFooter(invoice.doc_type).line1}</Text>
-          <Text style={{ fontFamily: "Helvetica-Bold", marginTop: 6 }}>{docFooter(invoice.doc_type).thanks}</Text>
-          <Text style={styles.footerLine}>{docFooter(invoice.doc_type).enquiry}</Text>
+          <Text>{footer.line1}</Text>
+          <Text style={{ fontFamily: "Helvetica-Bold", marginTop: 6 }}>{footer.thanks}</Text>
+          <Text style={styles.footerLine}>{footer.enquiry}</Text>
           <View style={styles.hr} />
-          <Text>{COMPANY.address}</Text>
+          <Text>{company.address}</Text>
           <Text style={styles.footerLine}>
-            Tel: {COMPANY.tel} Fax: - E-mail: {COMPANY.email} Web: -
+            Tel: {company.tel || "-"} Fax: - E-mail: {company.email || "-"} Web: -
           </Text>
         </View>
       </Page>

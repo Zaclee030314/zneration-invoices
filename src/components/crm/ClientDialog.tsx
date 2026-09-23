@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useWorkspace } from "@/lib/workspace";
 
 interface FormState {
   name: string;
@@ -55,6 +56,11 @@ export function ClientDialog({
 }) {
   const [form, setForm] = useState<FormState>(() => toForm(client));
   const [saving, setSaving] = useState(false);
+  const { company } = useWorkspace();
+  const seriesKeys = [
+    ...company.series.map((s) => s.key),
+    ...(form.default_category && !company.series.some((s) => s.key === form.default_category) ? [form.default_category] : []),
+  ];
 
   useEffect(() => {
     if (open) setForm(toForm(client));
@@ -126,7 +132,7 @@ export function ClientDialog({
           </div>
           <div className="flex items-center gap-2">
             <span className="text-neutral-500">Default category:</span>
-            {(["EVIV", "ZMIV"] as const).map((c) => (
+            {seriesKeys.map((c) => (
               <button
                 type="button"
                 key={c}

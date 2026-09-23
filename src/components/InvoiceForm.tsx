@@ -1,15 +1,17 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { ClientPicker } from "./ClientPicker";
 import { ProjectPicker } from "./ProjectPicker";
 import { LineItemsEditor, type DraftItem } from "./LineItemsEditor";
-import { CATEGORY_DEFAULTS, DOC_TITLE, currentYymm, docBasePath, seriesPrefix, formatRM } from "@/lib/company";
+import { DOC_TITLE, currentYymm, docBasePath, findSeries, seriesPrefix, formatRM } from "@/lib/company";
 import { defaultDueDate } from "@/lib/finance";
 import { loadDocumentPrefill } from "@/lib/documents";
 import { linkScheduleInvoice } from "@/lib/queries/finance";
+import { useWorkspace } from "@/lib/workspace";
 import type { Client, DocType, InvoiceCategory, InvoiceWithItems, ProjectWithClient } from "@/lib/types";
 
 function newItem(description = "", line_total = ""): DraftItem {
@@ -50,7 +52,10 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
   const docKind: DocType = existing?.doc_type ?? docType;
   const hasDueDate = docKind === "invoice";
 
-  const [category, setCategory] = useState<InvoiceCategory>(existing?.category ?? "EVIV");
+  const { company } = useWorkspace();
+  const seriesList = company.series;
+  const firstSeries = existing ? findSeries(seriesList, existing.category) : seriesList[0];
+  const [category, setCategory] = useState<InvoiceCategory>(existing?.category ?? seriesList[0]?.key ?? "");
   const [clientId, setClientId] = useState<string | null>(existing?.client_id ?? null);
   const [projectId, setProjectId] = useState<string | null>(existing?.project_id ?? null);
   const [billToName, setBillToName] = useState(existing?.bill_to_name ?? "");
@@ -62,9 +67,9 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
   );
   // Once the user (or a schedule prefill) sets the due date, stop re-deriving it.
   const [dueTouched, setDueTouched] = useState(isEdit);
-  const [bankName, setBankName] = useState(existing?.bank_name ?? CATEGORY_DEFAULTS.EVIV.bankName);
-  const [bankAccount, setBankAccount] = useState(existing?.bank_account ?? CATEGORY_DEFAULTS.EVIV.bankAccount);
-  const [specialNotes, setSpecialNotes] = useState(existing?.special_notes ?? CATEGORY_DEFAULTS.EVIV.specialNotes);
+  const [bankName, setBankName] = useState(existing ? existing.bank_name ?? "" : firstSeries?.bankName ?? "");
+  const [bankAccount, setBankAccount] = useState(existing ? existing.bank_account ?? "" : firstSeries?.bankAccount ?? "");
+  const [specialNotes, setSpecialNotes] = useState(existing ? existing.special_notes ?? "" : firstSeries?.specialNotes ?? "");
   const [salesTaxRate, setSalesTaxRate] = useState(String(existing?.sales_tax_rate ?? 0));
   const [discount, setDiscount] = useState(String(existing?.discount ?? 0));
   const [items, setItems] = useState<DraftItem[]>(
@@ -86,9 +91,9 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
   // Suggest the next invoice number for the chosen category+month. This is only
   // a suggestion — the field stays editable, and the number is saved as typed.
   useEffect(() => {
-    if (manualNo) return;
+    if (manualNo || !category) return;
     const yymm = currentYymm(new Date(invoiceDate));
-    const series = seriesPrefix(docKind, category);
+    const series = seriesPrefix(docKind, category, seriesList);
     supabase
       .from("invoice_counters")
       .select("last_seq")
@@ -99,7 +104,7 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
         const nextSeq = (data?.last_seq ?? 0) + 1;
         setInvoiceNo(`${series}${yymm}-${String(nextSeq).padStart(2, "0")}`);
       });
-  }, [category, invoiceDate, manualNo, docKind]);
+  }, [category, invoiceDate, manualNo, docKind, seriesList]);
 
   // Due date follows the invoice date (+30 days) until the user edits it.
   useEffect(() => {
@@ -135,10 +140,11 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
 
   function applyCategoryDefaults(cat: InvoiceCategory) {
     setCategory(cat);
-    if (!isEdit) {
-      setBankName(CATEGORY_DEFAULTS[cat].bankName);
-      setBankAccount(CATEGORY_DEFAULTS[cat].bankAccount);
-      setSpecialNotes(CATEGORY_DEFAULTS[cat].specialNotes);
+    const series = findSeries(seriesList, cat);
+    if (!isEdit && series) {
+      setBankName(series.bankName);
+      setBankAccount(series.bankAccount);
+      setSpecialNotes(series.specialNotes);
     }
   }
 
@@ -148,7 +154,7 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
       setBillToName(client.name);
       setBillToRegNo(client.reg_no ?? "");
       setBillToAddress(client.address ?? "");
-      if (client.default_category) applyCategoryDefaults(client.default_category);
+      if (client.default_category && findSeries(seriesList, client.default_category)) applyCategoryDefaults(client.default_category);
     }
   }
 
@@ -164,11 +170,14 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
   async function addNewClient(name: string) {
     const { data, error } = await supabase
       .from("clients")
-      .insert({ name, default_category: category })
+      .insert({ name, default_category: category || null })
       .select()
       .single();
     if (!error && data) selectClient(data as Client);
   }
+
+  // A document kept in a series the company no longer lists still shows its own.
+  const seriesKeys = [...seriesList.map((s) => s.key), ...(category && !findSeries(seriesList, category) ? [category] : [])];
 
   const subtotal = items.reduce((sum, it) => sum + (parseFloat(it.line_total) || 0), 0);
   const taxRate = parseFloat(salesTaxRate) || 0;
@@ -178,6 +187,7 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
+    if (!category) return setErr("This company has no invoice number series yet. Add one in Settings → Company.");
     if (!billToName.trim()) return setErr("Bill To name is required.");
     if (!items.some((it) => it.description.trim())) return setErr("Add at least one line item.");
     setSaving(true);
@@ -201,7 +211,7 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
 
     // Auto numbers are reserved atomically at save time (the preview shown in
     // the field is only a hint). Hand-typed numbers are saved as typed.
-    const series = seriesPrefix(docKind, category);
+    const series = seriesPrefix(docKind, category, seriesList);
     let finalNo = invoiceNo.trim();
     if (!isEdit && !manualNo) {
       const { data: reserved, error: rpcErr } = await supabase.rpc("next_invoice_no", {
@@ -280,10 +290,16 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
       <div className="bg-white border rounded p-4 space-y-4">
         <div className="flex gap-4 items-center">
           <div className="flex gap-1">
-            {(["EVIV", "ZMIV"] as const).map((c) => (
+            {seriesKeys.length === 0 && (
+              <Link href="/settings/company" className="text-sm text-amber-700 underline">
+                Add an invoice number series for this company
+              </Link>
+            )}
+            {seriesKeys.map((c) => (
               <button
                 key={c}
                 type="button"
+                title={findSeries(seriesList, c)?.label}
                 onClick={() => applyCategoryDefaults(c)}
                 className={`px-3 py-1.5 rounded text-sm ${category === c ? "bg-neutral-900 text-white" : "bg-neutral-100"}`}
               >

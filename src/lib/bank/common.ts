@@ -2,7 +2,7 @@ import type { TextItem } from "./pdf";
 import { formatCents } from "./money";
 import type { ParsedTxn, ValidationCheck } from "./types";
 
-export const PARSER_VERSION = "2026-09-14";
+export const PARSER_VERSION = "2026-09-23";
 
 // A PDF that is not a statement we can read; the message is shown to the team.
 export class StatementFormatError extends Error {}
