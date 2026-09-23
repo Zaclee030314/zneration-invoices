@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Wand2 } from "lucide-react";
+import { Combine, Wand2 } from "lucide-react";
 import type { BankAccount, BankTag, BankTransactionRow, ReceivedStatus, TxnCategory } from "@/lib/types";
 import { EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABEL, RECEIVED_STATUSES, formatDate } from "@/lib/labels";
 import { formatRM } from "@/lib/company";
@@ -15,11 +15,12 @@ import { fetchLinkedPayments, fetchMatchInvoices, fetchUnlinkedPayments, type Li
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { AutoMatchDialog } from "./AutoMatchDialog";
+import { CombineSalesDialog } from "./CombineSalesDialog";
 import { CategorySelect } from "./CategorySelect";
 import { ExpenseStatusBadge } from "./ExpenseStatusBadge";
 import { SortTh as Th, SummaryCard, type SortDir } from "./ListParts";
 import { ReceivedSheet } from "./ReceivedSheet";
-import type { PickerProject } from "./TagProjectPicker";
+import { TagProjectPicker, type LinkValue, type PickerProject } from "./TagProjectPicker";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 type SortField = "txn_date" | "payer" | "amount";
@@ -55,6 +56,8 @@ export function ReceivedList() {
   const [openId, setOpenId] = useState<string | null>(() => params.get("txn"));
   const [bulkNote, setBulkNote] = useState("");
   const [matching, setMatching] = useState(false);
+  const [combining, setCombining] = useState(false);
+  const [payer, setPayer] = useState<"all" | "named" | "unnamed">("all");
 
   useEffect(() => {
     Promise.all([fetchAccounts(), fetchTags(), listProjects().catch(() => [])]).then(([a, t, p]) => {
@@ -97,6 +100,8 @@ export function ReceivedList() {
     let list = rows;
     if (month !== "all") list = list.filter((r) => r.txn_date.slice(5, 7) === month);
     if (account !== "all") list = list.filter((r) => r.account_id === account);
+    if (payer === "named") list = list.filter((r) => r.counterparty);
+    else if (payer === "unnamed") list = list.filter((r) => !r.counterparty);
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter((r) =>
@@ -106,7 +111,7 @@ export function ReceivedList() {
       );
     }
     return list;
-  }, [rows, month, account, search, linked]);
+  }, [rows, month, account, payer, search, linked]);
 
   const ownTransfers = useMemo(() => base.filter((r) => r.category === "own_transfer"), [base]);
   const scoped = useMemo(() => {
@@ -255,6 +260,11 @@ export function ReceivedList() {
             </option>
           ))}
         </select>
+        <select aria-label="Payer" className={select} value={payer} onChange={(e) => setPayer(e.target.value as "all" | "named" | "unnamed")}>
+          <option value="all">Any payer</option>
+          <option value="named">Payer named</option>
+          <option value="unnamed">No payer name (QR, card)</option>
+        </select>
         <input className="min-w-[12rem] flex-1 rounded border px-3 py-1.5 text-sm" placeholder="Search payer, reference, invoice or amount" value={search} onChange={(e) => setSearch(e.target.value)} />
         <label className="flex items-center gap-1.5 text-sm text-neutral-600">
           <input type="checkbox" checked={hideOwn} onChange={(e) => setHideOwn(e.target.checked)} /> Hide own-account transfers
@@ -313,6 +323,16 @@ export function ReceivedList() {
               </option>
             ))}
           </select>
+          <TagProjectPicker
+            projectId={null}
+            tag={null}
+            projects={projects}
+            tags={tags}
+            clearable
+            placeholder="Set event or tag..."
+            className="border-white/40 bg-white py-1.5 text-sm text-neutral-900"
+            onChange={(v: LinkValue) => bulk(v, v.project_id || v.tag ? "Linked" : "Cleared event and tag")}
+          />
           <input
             className="w-64 rounded px-2 py-1 text-sm text-neutral-900"
             placeholder="Explanation for all selected"
@@ -322,6 +342,9 @@ export function ReceivedList() {
           />
           <button type="button" className="rounded border border-white/40 px-2 py-1 disabled:opacity-40" disabled={!bulkNote.trim()} onClick={bulkExplain}>
             Add explanation
+          </button>
+          <button type="button" className="flex items-center gap-1 rounded bg-white px-2 py-1 font-medium text-neutral-900 hover:bg-neutral-100" onClick={() => setCombining(true)}>
+            <Combine className="size-4" /> Combine into one sales record
           </button>
           <button type="button" className="ml-auto text-neutral-300 hover:text-white" onClick={() => setSelected(new Set())}>
             Clear selection
@@ -432,6 +455,15 @@ export function ReceivedList() {
         onChanged={reload}
       />
       <AutoMatchDialog open={matching} onOpenChange={setMatching} onLinked={reload} />
+      <CombineSalesDialog
+        open={combining}
+        onOpenChange={setCombining}
+        credits={rows.filter((r) => selected.has(r.id))}
+        onDone={() => {
+          setSelected(new Set());
+          reload();
+        }}
+      />
     </div>
   );
 }
