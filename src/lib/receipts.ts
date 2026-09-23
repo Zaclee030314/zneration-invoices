@@ -63,6 +63,18 @@ function nameTokens(name: string): string[] {
     .filter((w) => w.length >= 4 && !STOP.has(w));
 }
 
+// Payments recorded from a statement carry the bank's wording as their reference
+// (e.g. "PBB NO:410202ES FURRY ENTERPRISE ..."): the whole text, or a transaction
+// or QR number from it, identifies the bank line.
+function sameBankReference(credit: MatchCredit, reference: string | null | undefined): boolean {
+  if (!reference) return false;
+  const desc = compact(credit.description);
+  const ref = compact(reference.replace(/^(PBB|UOB)\s+/i, ""));
+  if (ref.length >= 12 && desc.includes(ref)) return true;
+  const ids = reference.toUpperCase().match(/\bNO:(?!000000)\d{6}|QR\s?\d{8}|\b\d{9,}\b/g) ?? [];
+  return ids.some((id) => desc.includes(compact(id)));
+}
+
 // How strongly the bank line itself points at this invoice or payer:
 // 3 = invoice number quoted, 2 = payer name clearly present, 1 = part of the name.
 // The payment note can name who actually paid (e.g. "paid by SOH MAY JUIN").
@@ -75,8 +87,11 @@ export function evidence(
   const text = compact(`${credit.counterparty ?? ""} ${credit.reference ?? ""} ${credit.description}`);
   const no = compact(invoiceNo);
   if (no.length >= 6 && text.includes(no)) return { score: 3, why: `bank reference quotes ${invoiceNo}` };
-  const ref = compact(payment?.reference);
-  if (ref.length >= 6 && text.includes(ref)) return { score: 2, why: "same reference as the recorded payment" };
+  if (sameBankReference(credit, payment?.reference)) return { score: 3, why: "recorded with this bank line's reference" };
+  const received = payment?.note?.match(/RM\s?([\d,]+(?:\.\d{1,2})?)\s+received/i);
+  if (received && cents(Number(received[1].replace(/,/g, ""))) === cents(credit.amount)) {
+    return { score: 2, why: `the payment note says RM${received[1]} was received` };
+  }
   const whole = compact(billTo);
   if (whole.length >= 6 && text.includes(whole)) return { score: 2, why: `paid by ${billTo}` };
   const hits = nameTokens(billTo).filter((t) => text.includes(t));
@@ -144,6 +159,17 @@ export function proposeLinks(payments: MatchPayment[], credits: MatchCredit[]): 
       for (const p of combo) take(p, c, `${combo.length} payments from the same payer add up to this transfer`);
     }
   }
+
+  // A payment recorded for less than the transfer (an overpayment refunded later,
+  // or part of a bigger transfer): only with strong evidence and one clear transfer.
+  for (const p of payments) {
+    if (!open.has(p.id)) continue;
+    const cands = credits
+      .filter((c) => cents(c.amount) > cents(p.amount) && (room.get(c.id) ?? 0) >= cents(p.amount) && daysApart(c.txn_date, p.paid_on) <= 1)
+      .map((c) => ({ c, e: evidence(c, p.invoice_no, p.bill_to_name, p) }))
+      .filter((x) => x.e.score >= 2);
+    if (cands.length === 1) take(p, cands[0].c, `part of a RM ${(cents(cands[0].c.amount) / 100).toFixed(2)} transfer, ${cands[0].e.why}`);
+  }
   return out;
 }
 
@@ -186,7 +212,8 @@ export function suggestForCredit(credit: MatchCredit, payments: MatchPayment[], 
     if (gap > 45) continue;
     const e = evidence(credit, p.invoice_no, p.bill_to_name, p);
     const exact = cents(p.amount) === left;
-    if (!exact && e.score < 2) continue;
+    // Same-day payments are offered even for a different amount (overpayments, part payments).
+    if (!exact && e.score < 2 && gap > 1) continue;
     const score = e.score * 10 + (exact ? 8 : 0) - Math.min(gap, 30) / 3 + 5;
     out.push({
       kind: "payment",
