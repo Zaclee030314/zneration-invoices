@@ -96,8 +96,9 @@ export function evidence(
   if (whole.length >= 6 && text.includes(whole)) return { score: 2, why: `paid by ${billTo}` };
   const hits = nameTokens(billTo).filter((t) => text.includes(t));
   if (hits.length >= 2 || hits.some((h) => h.length >= 7)) return { score: 2, why: `name matches ${billTo}` };
-  const noteHits = nameTokens(payment?.note ?? "").filter((t) => text.includes(t));
-  if (noteHits.length >= 2) return { score: 2, why: "payer named in the payment note" };
+  const payer = payment?.note?.match(/paid by ([^;.(]+)/i)?.[1] ?? "";
+  const noteHits = nameTokens(payer).filter((t) => text.includes(t));
+  if (noteHits.length >= 2) return { score: 2, why: `paid by ${payer.trim()}, as the payment note says` };
   if (hits.length === 1) return { score: 1, why: `partly matches ${billTo}` };
   return { score: 0, why: null };
 }
@@ -167,8 +168,34 @@ export function proposeLinks(payments: MatchPayment[], credits: MatchCredit[]): 
     const cands = credits
       .filter((c) => cents(c.amount) > cents(p.amount) && (room.get(c.id) ?? 0) >= cents(p.amount) && daysApart(c.txn_date, p.paid_on) <= 1)
       .map((c) => ({ c, e: evidence(c, p.invoice_no, p.bill_to_name, p) }))
-      .filter((x) => x.e.score >= 2);
-    if (cands.length === 1) take(p, cands[0].c, `part of a RM ${(cents(cands[0].c.amount) / 100).toFixed(2)} transfer, ${cands[0].e.why}`);
+      .filter((x) => x.e.score >= 2)
+      .sort((a, b) => b.e.score - a.e.score);
+    if (cands.length === 1 || (cands.length > 1 && cands[0].e.score > cands[1].e.score)) {
+      take(p, cands[0].c, `part of a RM ${(cents(cands[0].c.amount) / 100).toFixed(2)} transfer, ${cands[0].e.why}`);
+    }
+  }
+
+  // Payments recorded some time after the money arrived (dated when they were
+  // entered): same amount, the payer named on the bank line, and only one such credit.
+  const late = (p: MatchPayment) =>
+    credits.filter((c) => {
+      const gap = (Date.parse(p.paid_on) - Date.parse(c.txn_date)) / DAY;
+      return (
+        gap > WINDOW_DAYS &&
+        gap <= 90 &&
+        cents(c.amount) === cents(p.amount) &&
+        (room.get(c.id) ?? 0) >= cents(p.amount) &&
+        evidence(c, p.invoice_no, p.bill_to_name, p).score >= 2
+      );
+    });
+  for (const p of payments) {
+    if (!open.has(p.id)) continue;
+    const cands = late(p);
+    if (cands.length !== 1) continue;
+    const c = cands[0];
+    const rivals = payments.filter((q) => q.id !== p.id && open.has(q.id) && late(q).some((x) => x.id === c.id));
+    if (rivals.length) continue;
+    take(p, c, `recorded ${Math.round((Date.parse(p.paid_on) - Date.parse(c.txn_date)) / DAY)} days after it arrived, ${evidence(c, p.invoice_no, p.bill_to_name, p).why}`);
   }
   return out;
 }
@@ -209,8 +236,9 @@ export function suggestForCredit(credit: MatchCredit, payments: MatchPayment[], 
   for (const p of payments) {
     if (cents(p.amount) > left) continue;
     const gap = daysApart(credit.txn_date, p.paid_on);
-    if (gap > 45) continue;
+    if (gap > 120) continue;
     const e = evidence(credit, p.invoice_no, p.bill_to_name, p);
+    if (gap > 45 && e.score < 2) continue;
     const exact = cents(p.amount) === left;
     // Same-day payments are offered even for a different amount (overpayments, part payments).
     if (!exact && e.score < 2 && gap > 1) continue;
