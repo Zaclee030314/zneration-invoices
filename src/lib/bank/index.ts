@@ -16,7 +16,23 @@ export interface ParseOptions {
   forceFallback?: boolean;
 }
 
+// Fees the bank charges itself: shown as paid to the bank rather than as the bank's internal codes.
+const BANK_NAMES: Record<ParsedStatement["bank"], string> = { PBB: "Public Bank", UOB: "UOB" };
+function nameBankCharges(statement: ParsedStatement): ParsedStatement {
+  for (const t of statement.transactions) {
+    const type = (t.txnType ?? "").replace(/-$/, "").trim().toUpperCase();
+    if (t.counterparty || !/^(SC|SST DR|SERVICE CHARGE)$/.test(type)) continue;
+    t.counterparty = BANK_NAMES[statement.bank];
+    t.reference = type === "SST DR" ? "SST on service charge" : "Service charge";
+  }
+  return statement;
+}
+
 export function parseStatementLayout(layout: PdfLayout, opts: ParseOptions = {}): ParsedStatement {
+  return nameBankCharges(readStatement(layout, opts));
+}
+
+function readStatement(layout: PdfLayout, opts: ParseOptions): ParsedStatement {
   // The monthly statement reader fills in payee and reference itself.
   if (looksLikePbbMonthly(layout.text)) return parsePbbMonthly(layout);
   let statement: ParsedStatement;
