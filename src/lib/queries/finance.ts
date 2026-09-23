@@ -162,6 +162,7 @@ export type PaymentInput = {
   method: PaymentMethod;
   reference: string | null;
   note: string | null;
+  bank_transaction_id?: string | null;
 };
 
 export async function createPayment(input: PaymentInput): Promise<Result<Payment>> {

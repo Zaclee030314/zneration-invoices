@@ -27,7 +27,7 @@ export function CategorySelect({
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={NONE}>Uncategorised</SelectItem>
-        {EXPENSE_CATEGORIES.filter((c) => c.direction === direction || c.value === value).map((c) => (
+        {EXPENSE_CATEGORIES.filter((c) => c.directions.includes(direction) || c.value === value).map((c) => (
           <SelectItem key={c.value} value={c.value}>
             {c.label}
           </SelectItem>

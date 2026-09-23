@@ -10,9 +10,10 @@ import { LineItemsEditor, type DraftItem } from "./LineItemsEditor";
 import { DOC_TITLE, currentYymm, docBasePath, findSeries, seriesPrefix, formatRM } from "@/lib/company";
 import { defaultDueDate } from "@/lib/finance";
 import { loadDocumentPrefill } from "@/lib/documents";
-import { linkScheduleInvoice } from "@/lib/queries/finance";
+import { createPayment, linkScheduleInvoice } from "@/lib/queries/finance";
 import { useWorkspace } from "@/lib/workspace";
-import type { Client, DocType, InvoiceCategory, InvoiceWithItems, ProjectWithClient } from "@/lib/types";
+import { methodFor } from "@/lib/queries/receipts";
+import type { BankTransactionRow, Client, DocType, InvoiceCategory, InvoiceWithItems, ProjectWithClient } from "@/lib/types";
 
 function newItem(description = "", line_total = ""): DraftItem {
   return { key: crypto.randomUUID(), description, line_total };
@@ -84,6 +85,8 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
   const [manualNo, setManualNo] = useState<boolean>(isEdit);
   const [scheduleId, setScheduleId] = useState<string | null>(null);
   const [scheduleLabel, setScheduleLabel] = useState<string | null>(null);
+  // Money already received for this new invoice (from Expenses → Money received).
+  const [bankTxn, setBankTxn] = useState<BankTransactionRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const prefilled = useRef(false);
@@ -112,13 +115,34 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
     setDueDate(defaultDueDate(invoiceDate));
   }, [invoiceDate, hasDueDate, dueTouched]);
 
-  // Prefill from ?project= / ?schedule= / ?client= when creating.
+  // Prefill from ?project= / ?schedule= / ?client= / ?bank= when creating.
   useEffect(() => {
     if (isEdit || prefilled.current) return;
     prefilled.current = true;
     const qProject = searchParams.get("project");
     const qSchedule = searchParams.get("schedule");
     const qClient = searchParams.get("client");
+    const qBank = docKind === "invoice" ? searchParams.get("bank") : null;
+    if (qBank) {
+      // An invoice for money already received: dated and billed as the bank shows it.
+      supabase
+        .from("bank_transactions_view")
+        .select("*")
+        .eq("id", qBank)
+        .eq("direction", "in")
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (error || !data) return void toast.error(error?.message ?? "That bank line was not found.");
+          const txn = data as BankTransactionRow;
+          const left = Math.round((Number(txn.amount) - Number(txn.linked_total ?? 0)) * 100) / 100;
+          setBankTxn({ ...txn, amount: left });
+          setBillToName(txn.counterparty ?? "");
+          setInvoiceDate(txn.txn_date);
+          setItems([newItem(txn.reference ?? "", left.toFixed(2))]);
+          const series = seriesList.find((s) => s.bankAccount && s.bankAccount === txn.account_no);
+          if (series) applyCategoryDefaults(series.key);
+        });
+    }
     if (!qProject && !qSchedule && !qClient) return;
 
     loadDocumentPrefill({ project: qProject, schedule: qSchedule, client: qClient }).then((p) => {
@@ -272,8 +296,28 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
         sort_order: i,
       }));
     const { error: itemsError } = await supabase.from("invoice_items").insert(itemRows);
+    if (itemsError) {
+      setSaving(false);
+      return setErr(itemsError.message);
+    }
+
+    if (!isEdit && bankTxn && invoiceId) {
+      const paid = Math.min(Math.round(total * 100), Math.round(Number(bankTxn.amount) * 100)) / 100;
+      const payment = paid > 0
+        ? await createPayment({
+            invoice_id: invoiceId,
+            amount: paid,
+            paid_on: bankTxn.txn_date,
+            method: methodFor(bankTxn),
+            reference: (bankTxn.reference || bankTxn.counterparty || "").slice(0, 200) || null,
+            note: null,
+            bank_transaction_id: bankTxn.id,
+          })
+        : null;
+      if (payment?.error) toast.error(`Invoice created, but the payment was not recorded: ${payment.error}`);
+      else if (payment) toast.success(`Invoice created and RM ${formatRM(paid)} received on ${bankTxn.txn_date} recorded against it.`);
+    }
     setSaving(false);
-    if (itemsError) return setErr(itemsError.message);
 
     router.push(`${docBasePath(docKind)}/${invoiceId}`);
   }
@@ -281,6 +325,13 @@ export function InvoiceForm({ existing, docType = "invoice" }: { existing?: Invo
   return (
     <form onSubmit={save} className="space-y-6 max-w-3xl">
       {err && <p className="text-red-600 text-sm">{err}</p>}
+      {bankTxn && (
+        <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-3 py-2">
+          Money already received: RM {formatRM(Number(bankTxn.amount))} from {bankTxn.counterparty || "the bank statement"} on {bankTxn.txn_date} (
+          {bankTxn.account_label}). Saving records it as paid against this invoice and links it to that bank line. Keep the invoice date on or before the
+          payment date.
+        </p>
+      )}
       {scheduleLabel && (
         <p className="text-xs text-neutral-600 bg-neutral-50 border rounded px-3 py-2">
           This {DOC_TITLE[docKind].toLowerCase()} will be linked to the payment schedule row <span className="font-medium">{scheduleLabel}</span>.

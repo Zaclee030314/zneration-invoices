@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/expenses", label: "Payments out" },
+  { href: "/expenses/received", label: "Money received" },
   { href: "/expenses/statements", label: "Statements" },
 ];
 
@@ -15,7 +16,7 @@ export default function ExpensesLayout({ children }: { children: React.ReactNode
       <div>
         <h1 className="text-2xl font-semibold">Expenses</h1>
         <p className="text-sm text-neutral-500">
-          Payments out of the company bank accounts, each backed by an invoice, receipt or explanation.
+          Money in and out of the company bank accounts: payments out backed by a receipt or explanation, and money received matched to invoices.
         </p>
       </div>
       <nav className="flex gap-1 border-b overflow-x-auto">

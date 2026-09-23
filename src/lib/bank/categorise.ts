@@ -51,6 +51,13 @@ const RULES: { category: TxnCategory; tokens: Token[] }[] = [
   { category: "staff_claim", tokens: ["CLAIM", "REIMBURSE"] },
 ];
 
+// Money received is only guessed when it is clearly not a customer paying an
+// invoice, and on whole words: truncated forms like "EFUND" hide inside names.
+const IN_RULES: { category: TxnCategory; tokens: Token[] }[] = [
+  { category: "refund", tokens: [/\bREFUND/] },
+  { category: "loan_advance", tokens: ["BORROW", "LOAN", "ADVANCE", "PINJAM"] },
+];
+
 function tokenMatches(token: Token, upper: string, spaced: string, packed: string): boolean {
   if (token instanceof RegExp) return token.test(upper);
   const squashed = compact(token);
@@ -75,11 +82,11 @@ export function suggestCategory(
   t: Pick<ParsedTxn, "direction" | "txnType" | "description" | "counterparty">
 ): TxnCategory | null {
   if (isOwnTransfer(bank, accountName, t)) return "own_transfer";
-  if (t.direction === "in") return null;
   const upper = `${t.txnType ?? ""} ${t.description}`.toUpperCase();
   const spaced = ` ${upper.replace(/[^A-Z0-9]+/g, " ").trim()} `;
   const packed = compact(upper);
-  for (const rule of RULES) {
+  const rules = t.direction === "in" ? IN_RULES : RULES;
+  for (const rule of rules) {
     if (rule.tokens.some((token) => tokenMatches(token, upper, spaced, packed))) return rule.category;
   }
   return null;

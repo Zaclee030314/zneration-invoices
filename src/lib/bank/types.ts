@@ -38,6 +38,7 @@ export const TXN_CATEGORY_KEYS = [
   "own_transfer",
   "other",
   "customer_payment",
+  "product_sales",
   "other_income",
 ] as const;
 export type TxnCategory = (typeof TXN_CATEGORY_KEYS)[number];

@@ -270,6 +270,8 @@ export interface Payment {
   note: string | null;
   receipt_id: string | null;
   slip_path: string | null;
+  // The bank line the money arrived in (or left by, for a refund), once matched.
+  bank_transaction_id: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -281,6 +283,8 @@ export type { BankCode, TxnCategory } from "./bank/types";
 import type { BankCode, TxnCategory } from "./bank/types";
 
 export type ExpenseStatus = "done" | "needs_attention";
+// Money received: whether a bank credit is linked to the invoices it paid.
+export type ReceivedStatus = "matched" | "partial" | "no_invoice" | "unmatched";
 export type ExpenseDoneReason = "documents" | "explanation" | "own_transfer" | "zero_amount";
 export type ExpenseDocKind = "invoice" | "receipt" | "agreement" | "other";
 export type CategorySource = "auto" | "history" | "user";
@@ -362,8 +366,12 @@ export interface BankTransactionRow extends BankTransaction {
   project_name: string | null;
   project_kind: ProjectKind | null;
   doc_count: number;
-  status: ExpenseStatus | null;
+  // done / needs_attention for money out; ReceivedStatus for money in.
+  status: ExpenseStatus | ReceivedStatus | null;
   done_reason: ExpenseDoneReason | null;
+  // Sum and number of invoice payments linked to this bank line.
+  linked_total: number;
+  linked_count: number;
 }
 
 export interface ExpenseDocument {

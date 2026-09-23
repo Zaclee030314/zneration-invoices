@@ -77,6 +77,7 @@ export function PaymentsList({
             <th className="p-2 font-medium">Method</th>
             <th className="p-2 font-medium">Reference</th>
             <th className="p-2 font-medium text-right">Amount (RM)</th>
+            <th className="p-2 font-medium">Bank</th>
             <th className="p-2 font-medium">Receipt</th>
             <th className="p-2 font-medium">Slip</th>
             {canDelete && <th className="p-2"></th>}
@@ -106,6 +107,19 @@ export function PaymentsList({
                 <td className={cn("p-2 text-right font-medium whitespace-nowrap", isRefund && "text-red-700")}>
                   {isRefund ? "-" : ""}
                   {formatRM(Number(p.amount))}
+                </td>
+                <td className="p-2 whitespace-nowrap">
+                  {p.bank_transaction_id ? (
+                    <Link
+                      href={`/expenses/received?txn=${p.bank_transaction_id}&year=${p.paid_on.slice(0, 4)}`}
+                      className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs text-emerald-800 hover:underline"
+                      title="Matched to a line on the bank statement"
+                    >
+                      Matched
+                    </Link>
+                  ) : (
+                    <span className="text-xs text-neutral-400" title="Not yet matched to a bank statement line">Not matched</span>
+                  )}
                 </td>
                 <td className="p-2">
                   {p.receipt_id ? (
@@ -146,7 +160,7 @@ export function PaymentsList({
           <tr>
             <td className="p-2" colSpan={showInvoice ? 4 : 3}>{hasRefunds ? "Net received" : "Total received"}</td>
             <td className="p-2 text-right">{formatRM(total)}</td>
-            <td colSpan={canDelete ? 3 : 2}></td>
+            <td colSpan={canDelete ? 4 : 3}></td>
           </tr>
         </tfoot>
       </table>
